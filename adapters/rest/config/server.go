@@ -12,13 +12,16 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/gin-gonic/gin/binding"
 	"github.com/jblabs/tripmate-be/pkg/middleware"
+	appvalidator "github.com/jblabs/tripmate-be/pkg/validator"
 )
 
 func NewServer(cfg *Config, log *slog.Logger) *gin.Engine {
 	if cfg.IsProduction() {
 		gin.SetMode(gin.ReleaseMode)
 	}
+	binding.Validator = appvalidator.New()
 	engine := gin.New()
 	engine.Use(
 		middleware.RequestID(),

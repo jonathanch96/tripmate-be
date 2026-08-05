@@ -38,6 +38,10 @@ func New() *Validator {
 
 func (v *Validator) Struct(value any) error { return v.validate.Struct(value) }
 
+func (v *Validator) ValidateStruct(value any) error { return v.validate.Struct(value) }
+
+func (v *Validator) Engine() any { return v.validate }
+
 func Translate(err error) []response.FieldError {
 	validationErrors, ok := err.(validator.ValidationErrors)
 	if !ok {

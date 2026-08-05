@@ -10,6 +10,7 @@ func validConfig() *Config {
 	return &Config{
 		App:  AppConfig{Env: "local", Port: 8080, ShutdownTimeout: 15_000_000_000},
 		DB:   DBConfig{Host: "localhost", Port: 5432, User: "tripmate", Password: "secret", Name: "tripmate", Schema: "tripmate", SSLMode: "disable", MaxOpenConns: 25, MaxIdleConns: 5, ConnMaxLifetime: 1},
+		JWT:  JWTConfig{AccessSecret: strings.Repeat("a", 32), RefreshSecret: strings.Repeat("b", 32)},
 		CORS: CORSConfig{AllowedOrigins: []string{"http://localhost:3000"}},
 	}
 }

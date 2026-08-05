@@ -1,5 +1,54 @@
 basePath: /api/v1
 definitions:
+  authrequest.Login:
+    properties:
+      email:
+        maxLength: 255
+        type: string
+      password:
+        maxLength: 128
+        type: string
+    required:
+    - email
+    - password
+    type: object
+  authrequest.Refresh:
+    properties:
+      refresh_token:
+        type: string
+    required:
+    - refresh_token
+    type: object
+  authrequest.Register:
+    properties:
+      email:
+        maxLength: 255
+        type: string
+      name:
+        maxLength: 120
+        type: string
+      password:
+        maxLength: 128
+        minLength: 8
+        type: string
+    required:
+    - email
+    - name
+    - password
+    type: object
+  authresponse.Session:
+    properties:
+      access_token:
+        type: string
+      access_token_expires_at:
+        type: string
+      refresh_token:
+        type: string
+      refresh_token_expires_at:
+        type: string
+      user:
+        $ref: '#/definitions/userresponse.User'
+    type: object
   response.Envelope:
     properties:
       code:
@@ -29,6 +78,39 @@ definitions:
       rule:
         type: string
     type: object
+  userrequest.Update:
+    properties:
+      avatar_url:
+        maxLength: 2048
+        type: string
+      name:
+        maxLength: 120
+        type: string
+    type: object
+  userresponse.Lookup:
+    properties:
+      email:
+        type: string
+      id:
+        type: string
+      name:
+        type: string
+    type: object
+  userresponse.User:
+    properties:
+      avatar_url:
+        type: string
+      created_at:
+        type: string
+      email:
+        type: string
+      id:
+        type: string
+      name:
+        type: string
+      updated_at:
+        type: string
+    type: object
 host: localhost:8080
 info:
   contact: {}
@@ -36,6 +118,129 @@ info:
   title: TripMate API
   version: "1.0"
 paths:
+  /auth/login:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Login payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/authrequest.Login'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Envelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/authresponse.Session'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      summary: Log in
+      tags:
+      - auth
+  /auth/logout:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Refresh token
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/authrequest.Refresh'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      summary: Revoke a refresh token
+      tags:
+      - auth
+  /auth/refresh:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Refresh payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/authrequest.Refresh'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Envelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/authresponse.Session'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      summary: Rotate a refresh token
+      tags:
+      - auth
+  /auth/register:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Registration payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/authrequest.Register'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Envelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/authresponse.Session'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      summary: Register a new account
+      tags:
+      - auth
   /ping:
     get:
       description: Returns a fully populated envelope proving the API composition
@@ -54,6 +259,97 @@ paths:
       summary: Check API connectivity
       tags:
       - system
+  /users/lookup:
+    get:
+      parameters:
+      - description: Exact email address
+        in: query
+        name: email
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Envelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/userresponse.Lookup'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      security:
+      - BearerAuth: []
+      summary: Find a user by exact email
+      tags:
+      - users
+  /users/me:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Envelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/userresponse.User'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      security:
+      - BearerAuth: []
+      summary: Get current profile
+      tags:
+      - users
+    patch:
+      consumes:
+      - application/json
+      parameters:
+      - description: Profile changes
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/userrequest.Update'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Envelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/userresponse.User'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      security:
+      - BearerAuth: []
+      summary: Update current profile
+      tags:
+      - users
 securityDefinitions:
   BearerAuth:
     in: header

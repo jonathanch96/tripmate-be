@@ -1,0 +1,89 @@
+package user
+
+import (
+	"github.com/gin-gonic/gin"
+	"github.com/jblabs/tripmate-be/pkg/apperror"
+	"github.com/jblabs/tripmate-be/pkg/identity"
+	"github.com/jblabs/tripmate-be/pkg/response"
+	appvalidator "github.com/jblabs/tripmate-be/pkg/validator"
+	userdomain "github.com/jblabs/tripmate-be/services/tripmate/v1/domain/user"
+	userreq "github.com/jblabs/tripmate-be/services/tripmate/v1/entities/request/user"
+	userresp "github.com/jblabs/tripmate-be/services/tripmate/v1/entities/response/user"
+)
+
+func (c *controller) RegisterRoutes(group *gin.RouterGroup) {
+	users := group.Group("/users")
+	users.GET("/me", c.Me)
+	users.PATCH("/me", c.UpdateMe)
+	users.GET("/lookup", c.Lookup)
+}
+
+// Me godoc
+// @Summary Get current profile
+// @Tags users
+// @Security BearerAuth
+// @Produce json
+// @Success 200 {object} response.Envelope{data=userresponse.User}
+// @Failure 401 {object} response.Envelope
+// @Router /users/me [get]
+func (c *controller) Me(ctx *gin.Context) {
+	current := identity.MustFromContext(ctx.Request.Context())
+	entity, err := c.users.GetByID(ctx.Request.Context(), current.UserID)
+	if err != nil {
+		response.Error(ctx, err)
+		return
+	}
+	response.OK(ctx, "USER_FETCHED", userresp.FromDomain(*entity))
+}
+
+// UpdateMe godoc
+// @Summary Update current profile
+// @Tags users
+// @Security BearerAuth
+// @Accept json
+// @Produce json
+// @Param body body userrequest.Update true "Profile changes"
+// @Success 200 {object} response.Envelope{data=userresponse.User}
+// @Failure 400 {object} response.Envelope
+// @Failure 401 {object} response.Envelope
+// @Router /users/me [patch]
+func (c *controller) UpdateMe(ctx *gin.Context) {
+	var request userreq.Update
+	if err := ctx.ShouldBindJSON(&request); err != nil {
+		response.Error(ctx, apperror.WithFields("VALIDATION_FAILED", appvalidator.Translate(err)))
+		return
+	}
+	current := identity.MustFromContext(ctx.Request.Context())
+	entity, err := c.users.UpdateProfile(ctx.Request.Context(), current.UserID, userdomain.UpdateProfileInput{
+		Name: request.Name, AvatarURL: request.AvatarURL,
+	})
+	if err != nil {
+		response.Error(ctx, err)
+		return
+	}
+	response.OK(ctx, "USER_UPDATED", userresp.FromDomain(*entity))
+}
+
+// Lookup godoc
+// @Summary Find a user by exact email
+// @Tags users
+// @Security BearerAuth
+// @Produce json
+// @Param email query string true "Exact email address"
+// @Success 200 {object} response.Envelope{data=userresponse.Lookup}
+// @Failure 400 {object} response.Envelope
+// @Failure 404 {object} response.Envelope
+// @Router /users/lookup [get]
+func (c *controller) Lookup(ctx *gin.Context) {
+	var request userreq.Lookup
+	if err := ctx.ShouldBindQuery(&request); err != nil {
+		response.Error(ctx, apperror.WithFields("VALIDATION_FAILED", appvalidator.Translate(err)))
+		return
+	}
+	entity, err := c.users.FindByEmail(ctx.Request.Context(), request.Email)
+	if err != nil {
+		response.Error(ctx, err)
+		return
+	}
+	response.OK(ctx, "USER_FETCHED", userresp.LookupFromDomain(*entity))
+}

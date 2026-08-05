@@ -87,6 +87,9 @@ func (c *Config) Validate() error {
 	if c.DB.AutoMigrate && c.App.Env != "local" && c.App.Env != "test" {
 		return fmt.Errorf("DB_AUTO_MIGRATE can only be enabled in local or test environments")
 	}
+	if len(c.JWT.AccessSecret) < 32 || len(c.JWT.RefreshSecret) < 32 {
+		return fmt.Errorf("JWT secrets must be at least 32 bytes")
+	}
 	if c.IsProduction() {
 		if c.DB.SSLMode == "disable" {
 			return fmt.Errorf("DB_SSLMODE cannot be disable in production")
@@ -95,9 +98,6 @@ func (c *Config) Validate() error {
 			if strings.TrimSpace(origin) == "*" {
 				return fmt.Errorf("CORS_ALLOWED_ORIGINS cannot contain * in production")
 			}
-		}
-		if len(c.JWT.AccessSecret) < 32 || len(c.JWT.RefreshSecret) < 32 {
-			return fmt.Errorf("JWT secrets must be at least 32 bytes in production")
 		}
 	}
 	return nil

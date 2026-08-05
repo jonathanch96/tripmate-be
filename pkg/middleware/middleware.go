@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"errors"
 	"log/slog"
 	"net/http"
 	"runtime/debug"
@@ -8,11 +9,17 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	jwtlib "github.com/golang-jwt/jwt/v5"
+	"github.com/google/uuid"
 	"github.com/jblabs/tripmate-be/pkg/apperror"
+	"github.com/jblabs/tripmate-be/pkg/identity"
+	appjwt "github.com/jblabs/tripmate-be/pkg/jwt"
 	appLogger "github.com/jblabs/tripmate-be/pkg/logger"
 	"github.com/jblabs/tripmate-be/pkg/response"
 	"github.com/oklog/ulid/v2"
 )
+
+const IdentityKey = "identity"
 
 type CORSOptions struct {
 	AllowedOrigins []string
@@ -84,6 +91,43 @@ func CORS(options CORSOptions) gin.HandlerFunc {
 			c.AbortWithStatus(http.StatusNoContent)
 			return
 		}
+		c.Next()
+	}
+}
+
+func Authenticate(issuer *appjwt.Issuer) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		// Identity is derived exclusively from the verified token. A legacy or forged
+		// identity header must never survive to downstream handlers.
+		c.Request.Header.Del("X-User-ID")
+		header := strings.TrimSpace(c.GetHeader("Authorization"))
+		parts := strings.Fields(header)
+		if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") || parts[1] == "" {
+			c.Abort()
+			response.Error(c, apperror.New("UNAUTHENTICATED"))
+			return
+		}
+		claims, err := issuer.ParseAccess(parts[1])
+		if err != nil {
+			c.Abort()
+			if errors.Is(err, jwtlib.ErrTokenExpired) {
+				response.Error(c, apperror.Newf("UNAUTHENTICATED", "session expired"))
+			} else {
+				response.Error(c, apperror.New("UNAUTHENTICATED"))
+			}
+			return
+		}
+		userID, err := uuid.Parse(claims.Subject)
+		if err != nil {
+			c.Abort()
+			response.Error(c, apperror.New("UNAUTHENTICATED"))
+			return
+		}
+		value := identity.Identity{UserID: userID, Email: claims.Email, Name: claims.Name}
+		c.Set(IdentityKey, value)
+		requestContext := identity.WithContext(c.Request.Context(), value)
+		requestContext = appLogger.WithUser(requestContext, userID.String())
+		c.Request = c.Request.WithContext(requestContext)
 		c.Next()
 	}
 }
