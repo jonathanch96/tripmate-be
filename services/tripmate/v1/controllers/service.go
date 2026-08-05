@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	"context"
 	"log/slog"
 
 	"github.com/gin-gonic/gin"
@@ -10,10 +11,19 @@ import (
 	"github.com/jblabs/tripmate-be/pkg/middleware"
 	"github.com/jblabs/tripmate-be/pkg/response"
 	authcontroller "github.com/jblabs/tripmate-be/services/tripmate/v1/controllers/auth"
+	tripcontroller "github.com/jblabs/tripmate-be/services/tripmate/v1/controllers/trip"
 	usercontroller "github.com/jblabs/tripmate-be/services/tripmate/v1/controllers/user"
 	refreshtokens "github.com/jblabs/tripmate-be/services/tripmate/v1/db/tripmate/refresh_tokens"
+	invitesdb "github.com/jblabs/tripmate-be/services/tripmate/v1/db/tripmate/trip_invitations"
+	partsdb "github.com/jblabs/tripmate-be/services/tripmate/v1/db/tripmate/trip_participants"
+	tripsdb "github.com/jblabs/tripmate-be/services/tripmate/v1/db/tripmate/trips"
 	users "github.com/jblabs/tripmate-be/services/tripmate/v1/db/tripmate/users"
+	invitationdomain "github.com/jblabs/tripmate-be/services/tripmate/v1/domain/invitation"
+	participantdomain "github.com/jblabs/tripmate-be/services/tripmate/v1/domain/participant"
+	tripdomain "github.com/jblabs/tripmate-be/services/tripmate/v1/domain/trip"
 	userdomain "github.com/jblabs/tripmate-be/services/tripmate/v1/domain/user"
+	domainparticipant "github.com/jblabs/tripmate-be/services/tripmate/v1/entities/domain/participant"
+	domaintrip "github.com/jblabs/tripmate-be/services/tripmate/v1/entities/domain/trip"
 	"gorm.io/gorm"
 )
 
@@ -26,6 +36,7 @@ type Dependencies struct {
 type Service struct {
 	auth   authcontroller.Controller
 	users  usercontroller.Controller
+	trip   *tripcontroller.Controller
 	issuer *appjwt.Issuer
 }
 
@@ -39,8 +50,13 @@ func NewService(deps Dependencies) *Service {
 		Tokens: refreshtokens.NewGormPostgresqlAdapter(deps.DB),
 		Hasher: apphash.NewArgon2Hasher(), Issuer: issuer,
 	})
+	tripRepo := tripsdb.New(deps.DB)
+	partRepo := partsdb.New(deps.DB)
+	tripService := tripdomain.NewService(tripdomain.Dependencies{Repo: tripRepo, Participants: partRepo, Tx: tripTransactor{deps.DB}})
+	partService := participantdomain.NewService(partRepo, tripRepo, nil)
+	inviteService := invitationdomain.NewService(invitesdb.New(deps.DB), tripRepo, userService, partService)
 	return &Service{auth: authcontroller.NewController(userService),
-		users: usercontroller.NewController(userService), issuer: issuer}
+		users: usercontroller.NewController(userService), trip: tripcontroller.New(tripService, partService, inviteService), issuer: issuer}
 }
 
 func (s *Service) RegisterRoutes(group *gin.RouterGroup) {
@@ -49,6 +65,23 @@ func (s *Service) RegisterRoutes(group *gin.RouterGroup) {
 	protected := group.Group("")
 	protected.Use(middleware.Authenticate(s.issuer))
 	s.users.RegisterRoutes(protected)
+	s.trip.RegisterRoutes(protected)
+}
+
+type tripTransactor struct{ db *gorm.DB }
+
+func (t tripTransactor) CreateTripWithPlanner(ctx context.Context, trip *domaintrip.Trip, part *domainparticipant.Participant) (*domaintrip.Trip, error) {
+	var created *domaintrip.Trip
+	err := t.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var err error
+		created, err = tripsdb.New(tx).Create(ctx, trip)
+		if err != nil {
+			return err
+		}
+		_, err = partsdb.New(tx).Create(ctx, part)
+		return err
+	})
+	return created, err
 }
 
 // Ping godoc
