@@ -1,0 +1,58 @@
+package config
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"log/slog"
+	"net/http"
+	"os/signal"
+	"syscall"
+	"time"
+
+	"github.com/gin-gonic/gin"
+	"github.com/jblabs/tripmate-be/pkg/middleware"
+)
+
+func NewServer(cfg *Config, log *slog.Logger) *gin.Engine {
+	if cfg.IsProduction() {
+		gin.SetMode(gin.ReleaseMode)
+	}
+	engine := gin.New()
+	engine.Use(
+		middleware.RequestID(),
+		middleware.Logging(log),
+		middleware.Recovery(log),
+		middleware.CORS(middleware.CORSOptions{AllowedOrigins: cfg.CORS.AllowedOrigins, Production: cfg.IsProduction()}),
+	)
+	return engine
+}
+
+func Run(ctx context.Context, cfg *Config, engine *gin.Engine) error {
+	ctx, stop := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+
+	server := &http.Server{
+		Addr:              fmt.Sprintf(":%d", cfg.App.Port),
+		Handler:           engine,
+		ReadHeaderTimeout: 5 * time.Second,
+	}
+	errCh := make(chan error, 1)
+	go func() { errCh <- server.ListenAndServe() }()
+
+	select {
+	case err := <-errCh:
+		if errors.Is(err, http.ErrServerClosed) {
+			return nil
+		}
+		return err
+	case <-ctx.Done():
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), cfg.App.ShutdownTimeout)
+		defer cancel()
+		if err := server.Shutdown(shutdownCtx); err != nil {
+			_ = server.Close()
+			return fmt.Errorf("graceful shutdown: %w", err)
+		}
+		return nil
+	}
+}
