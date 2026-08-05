@@ -83,6 +83,9 @@ func decimalGTE(fl validator.FieldLevel) bool {
 
 func dateAfter(fl validator.FieldLevel) bool {
 	start := fl.Parent().FieldByName(fl.Param())
+	if !start.IsValid() || !start.CanInterface() || !fl.Field().CanInterface() {
+		return false
+	}
 	end, okEnd := fl.Field().Interface().(time.Time)
 	begin, okStart := start.Interface().(time.Time)
 	return okEnd && okStart && !end.Before(begin)

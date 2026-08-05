@@ -36,7 +36,7 @@ type DBConfig struct {
 	MaxOpenConns    int           `envconfig:"DB_MAX_OPEN_CONNS" default:"25"`
 	MaxIdleConns    int           `envconfig:"DB_MAX_IDLE_CONNS" default:"5"`
 	ConnMaxLifetime time.Duration `envconfig:"DB_CONN_MAX_LIFETIME" default:"30m"`
-	AutoMigrate     bool          `envconfig:"DB_AUTO_MIGRATE" default:"true"`
+	AutoMigrate     bool          `envconfig:"DB_AUTO_MIGRATE" default:"false"`
 }
 
 type JWTConfig struct {
@@ -83,6 +83,9 @@ func (c *Config) Validate() error {
 	}
 	if c.DB.Schema == "" || strings.ContainsAny(c.DB.Schema, " ;,'\"") {
 		return fmt.Errorf("DB_SCHEMA is invalid")
+	}
+	if c.DB.AutoMigrate && c.App.Env != "local" && c.App.Env != "test" {
+		return fmt.Errorf("DB_AUTO_MIGRATE can only be enabled in local or test environments")
 	}
 	if c.IsProduction() {
 		if c.DB.SSLMode == "disable" {

@@ -26,6 +26,15 @@ func TestValidateRefusesUnsafeProduction(t *testing.T) {
 	}
 }
 
+func TestValidateRefusesAutoMigrateOutsideLocal(t *testing.T) {
+	cfg := validConfig()
+	cfg.App.Env = "staging"
+	cfg.DB.AutoMigrate = true
+	if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), "DB_AUTO_MIGRATE") {
+		t.Fatalf("got %v", err)
+	}
+}
+
 func TestDSNIncludesSearchPath(t *testing.T) {
 	if dsn := validConfig().DB.DSN(); !strings.Contains(dsn, "search_path=tripmate") {
 		t.Fatalf("DSN has no search_path: %s", dsn)

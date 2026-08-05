@@ -7,11 +7,11 @@ Go 1.26.5 API foundation for TripMate. The service uses Gin, GORM/PostgreSQL, ve
 ```bash
 cp .env.example .env
 make up
+make migrate-up
 make run
 curl http://localhost:8080/healthz
 curl http://localhost:8080/api/v1/ping
 open http://localhost:8080/swagger/index.html
 ```
 
-Run `make test`, `make lint-arch`, and `make build` before opening a PR. `make down` stops the local stack. The initial migration creates only the `tripmate` schema and migration metadata; business tables begin in Sprint 01.
-
+Run `make test`, `make test-int`, `make lint-arch`, and `make build` before opening a PR. `make down` stops the local stack. Migrations are authoritative and automatic migration is disabled by default. The initial migration creates only the `tripmate` schema and migration metadata; business tables begin in Sprint 01.

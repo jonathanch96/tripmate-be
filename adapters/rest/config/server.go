@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"os/signal"
 	"syscall"
@@ -29,6 +30,10 @@ func NewServer(cfg *Config, log *slog.Logger) *gin.Engine {
 }
 
 func Run(ctx context.Context, cfg *Config, engine *gin.Engine) error {
+	return run(ctx, cfg, engine, nil)
+}
+
+func run(ctx context.Context, cfg *Config, engine *gin.Engine, started chan<- net.Addr) error {
 	ctx, stop := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
@@ -37,8 +42,15 @@ func Run(ctx context.Context, cfg *Config, engine *gin.Engine) error {
 		Handler:           engine,
 		ReadHeaderTimeout: 5 * time.Second,
 	}
+	listener, err := net.Listen("tcp", server.Addr)
+	if err != nil {
+		return fmt.Errorf("listen on %s: %w", server.Addr, err)
+	}
 	errCh := make(chan error, 1)
-	go func() { errCh <- server.ListenAndServe() }()
+	go func() { errCh <- server.Serve(listener) }()
+	if started != nil {
+		started <- listener.Addr()
+	}
 
 	select {
 	case err := <-errCh:
