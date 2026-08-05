@@ -6,7 +6,7 @@ services:
       POSTGRES_PASSWORD: tripmate
       POSTGRES_DB: tripmate
     ports:
-      - "5432:5432"
+      - "${POSTGRES_HOST_PORT:-5432}:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U tripmate -d tripmate"]
       interval: 5s
@@ -28,6 +28,9 @@ services:
     working_dir: /app
     command: ["-c", ".air.toml"]
     env_file: .env
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
     volumes:
       - .:/app
     ports:
@@ -45,4 +48,3 @@ services:
 
 volumes:
   tripmate-postgres:
-

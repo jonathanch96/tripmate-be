@@ -1,0 +1,62 @@
+basePath: /api/v1
+definitions:
+  response.Envelope:
+    properties:
+      code:
+        type: string
+      data: {}
+      errors:
+        items:
+          $ref: '#/definitions/response.FieldError'
+        type: array
+      message:
+        type: string
+      meta: {}
+      success:
+        type: boolean
+      timestamp:
+        example: "2026-08-05T09:12:33.412Z"
+        type: string
+      trace_id:
+        type: string
+    type: object
+  response.FieldError:
+    properties:
+      field:
+        type: string
+      message:
+        type: string
+      rule:
+        type: string
+    type: object
+host: localhost:8080
+info:
+  contact: {}
+  description: Shared-trip expense settlement API.
+  title: TripMate API
+  version: "1.0"
+paths:
+  /ping:
+    get:
+      description: Returns a fully populated envelope proving the API composition
+        root is wired.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      summary: Check API connectivity
+      tags:
+      - system
+securityDefinitions:
+  BearerAuth:
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"
