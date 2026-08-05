@@ -75,7 +75,7 @@ func write(c *gin.Context, status int, success bool, code, message string, data,
 	}
 	c.JSON(status, Envelope{
 		Success: success, Code: code, Message: message, Data: data, Meta: meta,
-		Errors: fields, TraceID: traceID, Timestamp: time.Now().UTC(),
+		Errors: fields, TraceID: traceID, Timestamp: time.Now().UTC().Truncate(time.Millisecond),
 	})
 }
 

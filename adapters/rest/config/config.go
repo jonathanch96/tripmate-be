@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"net/url"
+	"os"
 	"strings"
 	"time"
 
@@ -52,7 +53,10 @@ type CORSConfig struct {
 type ObservabilityConfig struct{}
 
 func Load() (*Config, error) {
-	_ = godotenv.Load()
+	environment := os.Getenv("APP_ENV")
+	if environment == "" || environment == "local" || environment == "test" {
+		_ = godotenv.Load()
+	}
 	var cfg Config
 	if err := envconfig.Process("", &cfg); err != nil {
 		return nil, fmt.Errorf("load configuration: %w", err)

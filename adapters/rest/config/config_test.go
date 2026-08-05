@@ -1,6 +1,7 @@
 package config
 
 import (
+	"os"
 	"strings"
 	"testing"
 )
@@ -28,5 +29,29 @@ func TestValidateRefusesUnsafeProduction(t *testing.T) {
 func TestDSNIncludesSearchPath(t *testing.T) {
 	if dsn := validConfig().DB.DSN(); !strings.Contains(dsn, "search_path=tripmate") {
 		t.Fatalf("DSN has no search_path: %s", dsn)
+	}
+}
+
+func TestLoadNamesMissingRequiredVariable(t *testing.T) {
+	t.Chdir(t.TempDir())
+	t.Setenv("APP_ENV", "test")
+	t.Setenv("DB_HOST", "localhost")
+	t.Setenv("DB_USER", "tripmate")
+	t.Setenv("DB_NAME", "tripmate")
+	previous, existed := os.LookupEnv("DB_PASSWORD")
+	if err := os.Unsetenv("DB_PASSWORD"); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if existed {
+			_ = os.Setenv("DB_PASSWORD", previous)
+		} else {
+			_ = os.Unsetenv("DB_PASSWORD")
+		}
+	})
+
+	_, err := Load()
+	if err == nil || !strings.Contains(err.Error(), "DB_PASSWORD") {
+		t.Fatalf("error must name DB_PASSWORD, got %v", err)
 	}
 }
