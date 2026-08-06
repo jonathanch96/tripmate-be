@@ -11,15 +11,22 @@ import (
 	"github.com/jblabs/tripmate-be/pkg/middleware"
 	"github.com/jblabs/tripmate-be/pkg/response"
 	authcontroller "github.com/jblabs/tripmate-be/services/tripmate/v1/controllers/auth"
+	expensecontroller "github.com/jblabs/tripmate-be/services/tripmate/v1/controllers/expense"
 	invitationcontroller "github.com/jblabs/tripmate-be/services/tripmate/v1/controllers/invitation"
 	participantcontroller "github.com/jblabs/tripmate-be/services/tripmate/v1/controllers/participant"
 	tripcontroller "github.com/jblabs/tripmate-be/services/tripmate/v1/controllers/trip"
 	usercontroller "github.com/jblabs/tripmate-be/services/tripmate/v1/controllers/user"
+	appdb "github.com/jblabs/tripmate-be/services/tripmate/v1/db"
+	payersdb "github.com/jblabs/tripmate-be/services/tripmate/v1/db/tripmate/expense_payers"
+	splitsdb "github.com/jblabs/tripmate-be/services/tripmate/v1/db/tripmate/expense_splits"
+	expensesdb "github.com/jblabs/tripmate-be/services/tripmate/v1/db/tripmate/expenses"
+	outboxdb "github.com/jblabs/tripmate-be/services/tripmate/v1/db/tripmate/outbox_events"
 	refreshtokens "github.com/jblabs/tripmate-be/services/tripmate/v1/db/tripmate/refresh_tokens"
 	invitesdb "github.com/jblabs/tripmate-be/services/tripmate/v1/db/tripmate/trip_invitations"
 	partsdb "github.com/jblabs/tripmate-be/services/tripmate/v1/db/tripmate/trip_participants"
 	tripsdb "github.com/jblabs/tripmate-be/services/tripmate/v1/db/tripmate/trips"
 	users "github.com/jblabs/tripmate-be/services/tripmate/v1/db/tripmate/users"
+	expensedomain "github.com/jblabs/tripmate-be/services/tripmate/v1/domain/expense"
 	invitationdomain "github.com/jblabs/tripmate-be/services/tripmate/v1/domain/invitation"
 	participantdomain "github.com/jblabs/tripmate-be/services/tripmate/v1/domain/participant"
 	tripdomain "github.com/jblabs/tripmate-be/services/tripmate/v1/domain/trip"
@@ -36,12 +43,13 @@ type Dependencies struct {
 }
 
 type Service struct {
-	auth    authcontroller.Controller
-	users   usercontroller.Controller
-	trips   tripcontroller.Controller
-	parts   participantcontroller.Controller
-	invites invitationcontroller.Controller
-	issuer  *appjwt.Issuer
+	auth     authcontroller.Controller
+	users    usercontroller.Controller
+	trips    tripcontroller.Controller
+	parts    participantcontroller.Controller
+	invites  invitationcontroller.Controller
+	expenses expensecontroller.Controller
+	issuer   *appjwt.Issuer
 }
 
 func NewService(deps Dependencies) *Service {
@@ -57,14 +65,20 @@ func NewService(deps Dependencies) *Service {
 	})
 	tripRepo := tripsdb.New(deps.DB)
 	partRepo := partsdb.New(deps.DB)
-	tripService := tripdomain.NewService(tripdomain.Dependencies{Repo: tripRepo, Participants: partRepo, Tx: tripTransactor{deps.DB}})
-	partService := participantdomain.NewService(partRepo, tripRepo, nil)
+	expenseRepo := expensesdb.New(deps.DB)
+	tripService := tripdomain.NewService(tripdomain.Dependencies{Repo: tripRepo, Participants: partRepo, Tx: tripTransactor{deps.DB}, Expenses: expenseRepo})
+	partService := participantdomain.NewService(partRepo, tripRepo, expenseRepo)
+	expenseService := expensedomain.NewService(expensedomain.Dependencies{
+		Expenses: expenseRepo, Payers: payersdb.New(deps.DB), Splits: splitsdb.New(deps.DB),
+		Participants: partRepo, Outbox: outboxdb.New(deps.DB), UOW: appdb.NewGormUnitOfWork(deps.DB),
+	})
 	inviteService := invitationdomain.NewService(inviteRepo, tripRepo, userService, partService)
 	return &Service{
 		auth: authcontroller.NewController(userService), users: usercontroller.NewController(userService),
 		trips:   tripcontroller.NewController(tripService, partService),
 		parts:   participantcontroller.NewController(tripService, partService),
 		invites: invitationcontroller.NewController(tripService, partService, inviteService), issuer: issuer,
+		expenses: expensecontroller.NewController(tripService, partService, expenseService),
 	}
 }
 
@@ -77,6 +91,7 @@ func (s *Service) RegisterRoutes(group *gin.RouterGroup) {
 	s.trips.RegisterRoutes(protected)
 	s.parts.RegisterRoutes(protected)
 	s.invites.RegisterRoutes(protected)
+	s.expenses.RegisterRoutes(protected)
 }
 
 type tripTransactor struct{ db *gorm.DB }

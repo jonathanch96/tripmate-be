@@ -1,0 +1,18 @@
+package expense_payers
+
+import (
+	"context"
+
+	"github.com/google/uuid"
+	expensedomain "github.com/jblabs/tripmate-be/services/tripmate/v1/domain/expense"
+	domainexpense "github.com/jblabs/tripmate-be/services/tripmate/v1/entities/domain/expense"
+)
+
+type Repository interface {
+	BulkCreate(context.Context, uuid.UUID, []domainexpense.Payer) error
+	ListByExpenseIDs(context.Context, []uuid.UUID) (map[uuid.UUID][]domainexpense.Payer, error)
+	DeleteByExpenseID(context.Context, uuid.UUID) error
+}
+
+var _ Repository = (*adapterGormPostgresql)(nil)
+var _ expensedomain.PayerRepository = (*adapterGormPostgresql)(nil)
