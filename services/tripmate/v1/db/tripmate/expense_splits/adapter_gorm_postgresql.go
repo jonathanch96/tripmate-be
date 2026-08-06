@@ -37,7 +37,11 @@ func (a *adapterGormPostgresql) ListByExpenseIDs(ctx context.Context, ids []uuid
 		return result, nil
 	}
 	var models []Split
-	if err := appdb.FromContext(ctx, a.db).WithContext(ctx).Where("expense_id IN ?", ids).Order("created_at, id").Find(&models).Error; err != nil {
+	if err := appdb.FromContext(ctx, a.db).WithContext(ctx).Table("tripmate.expense_splits AS s").
+		Select(`s.*, u.email AS user_email, u.name AS user_name, u.avatar_url AS user_avatar_url,
+			u.created_at AS user_created_at, u.updated_at AS user_updated_at`).
+		Joins("JOIN tripmate.users AS u ON u.id = s.user_id").
+		Where("s.expense_id IN ?", ids).Order("s.created_at, s.id").Find(&models).Error; err != nil {
 		return nil, err
 	}
 	for _, model := range models {

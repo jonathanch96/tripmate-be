@@ -30,4 +30,13 @@ func (a *adapterGormPostgresql) Create(ctx context.Context, entity *event.Outbox
 	return nil
 }
 
+func (a *adapterGormPostgresql) CountByAggregateID(ctx context.Context, aggregateID uuid.UUID) (int64, error) {
+	var count int64
+	err := appdb.FromContext(ctx, a.db).WithContext(ctx).Model(&OutboxEvent{}).Where("aggregate_id = ?", aggregateID).Count(&count).Error
+	if err != nil {
+		return 0, apperror.Wrap(err, "INTERNAL_ERROR")
+	}
+	return count, nil
+}
+
 func ptr(value OutboxEvent) *OutboxEvent { return &value }

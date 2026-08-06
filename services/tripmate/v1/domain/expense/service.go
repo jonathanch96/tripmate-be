@@ -217,7 +217,6 @@ func (s *service) transition(ctx context.Context, actor identity.Identity, tc tr
 	}
 	now := s.deps.Clock().UTC()
 	entity.Status = status
-	entity.Version = entity.Version
 	if status == domainexpense.StatusApproved {
 		entity.ApprovedByUserID = &actor.UserID
 		entity.ApprovedAt = &now
@@ -242,7 +241,7 @@ func (s *service) transition(ctx context.Context, actor identity.Identity, tc tr
 	return s.deps.Expenses.GetByID(ctx, id)
 }
 
-func (s *service) List(ctx context.Context, tc tripctx.TripContext, filter Filter) ([]domainexpense.Expense, int64, error) {
+func (s *service) List(ctx context.Context, tc tripctx.TripContext, filter Filter) ([]domainexpense.Expense, int64, Totals, error) {
 	return s.deps.Expenses.ListByTripID(ctx, tc.Trip.ID, filter)
 }
 

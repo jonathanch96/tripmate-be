@@ -108,6 +108,16 @@ func parseID(ctx *gin.Context) (uuid.UUID, bool) {
 	return id, true
 }
 
+// create godoc
+// @Summary Create an expense
+// @Tags expenses
+// @Security BearerAuth
+// @Param code path string true "Trip code"
+// @Param body body expenserequest.Create true "Expense"
+// @Success 201 {object} response.Envelope{data=expenseresponse.Expense}
+// @Failure 400 {object} response.Envelope
+// @Failure 403 {object} response.Envelope
+// @Router /trips/{code}/expenses [post]
 func (c *controller) create(ctx *gin.Context) {
 	var req expenserequest.Create
 	if !bind(ctx, &req) {
@@ -137,6 +147,15 @@ func (c *controller) create(ctx *gin.Context) {
 	response.Created(ctx, "EXPENSE_CREATED", expenseresponse.FromDomain(*entity, tc, actor(ctx).UserID))
 }
 
+// get godoc
+// @Summary Get an expense
+// @Tags expenses
+// @Security BearerAuth
+// @Param code path string true "Trip code"
+// @Param id path string true "Expense ID"
+// @Success 200 {object} response.Envelope{data=expenseresponse.Expense}
+// @Failure 404 {object} response.Envelope
+// @Router /trips/{code}/expenses/{id} [get]
 func (c *controller) get(ctx *gin.Context) {
 	id, ok := parseID(ctx)
 	if !ok {
@@ -151,6 +170,17 @@ func (c *controller) get(ctx *gin.Context) {
 	response.OK(ctx, "EXPENSE_FETCHED", expenseresponse.FromDomain(*entity, tc, actor(ctx).UserID))
 }
 
+// update godoc
+// @Summary Update an expense
+// @Tags expenses
+// @Security BearerAuth
+// @Param code path string true "Trip code"
+// @Param id path string true "Expense ID"
+// @Param body body expenserequest.Update true "Expense changes"
+// @Success 200 {object} response.Envelope{data=expenseresponse.Expense}
+// @Failure 400 {object} response.Envelope
+// @Failure 403 {object} response.Envelope
+// @Router /trips/{code}/expenses/{id} [patch]
 func (c *controller) update(ctx *gin.Context) {
 	id, ok := parseID(ctx)
 	if !ok {
@@ -195,6 +225,15 @@ func (c *controller) update(ctx *gin.Context) {
 	response.OK(ctx, "EXPENSE_UPDATED", expenseresponse.FromDomain(*entity, tc, actor(ctx).UserID))
 }
 
+// delete godoc
+// @Summary Delete an expense
+// @Tags expenses
+// @Security BearerAuth
+// @Param code path string true "Trip code"
+// @Param id path string true "Expense ID"
+// @Success 200 {object} response.Envelope
+// @Failure 403 {object} response.Envelope
+// @Router /trips/{code}/expenses/{id} [delete]
 func (c *controller) delete(ctx *gin.Context) {
 	id, ok := parseID(ctx)
 	if !ok {
@@ -206,6 +245,16 @@ func (c *controller) delete(ctx *gin.Context) {
 	}
 	response.NoData(ctx, "EXPENSE_DELETED")
 }
+
+// approve godoc
+// @Summary Approve a pending expense
+// @Tags expenses
+// @Security BearerAuth
+// @Param code path string true "Trip code"
+// @Param id path string true "Expense ID"
+// @Success 200 {object} response.Envelope{data=expenseresponse.Expense}
+// @Failure 403 {object} response.Envelope
+// @Router /trips/{code}/expenses/{id}/approve [post]
 func (c *controller) approve(ctx *gin.Context) {
 	id, ok := parseID(ctx)
 	if !ok {
@@ -219,6 +268,18 @@ func (c *controller) approve(ctx *gin.Context) {
 	}
 	response.OK(ctx, "EXPENSE_APPROVED", expenseresponse.FromDomain(*entity, tc, actor(ctx).UserID))
 }
+
+// reject godoc
+// @Summary Reject a pending expense
+// @Tags expenses
+// @Security BearerAuth
+// @Param code path string true "Trip code"
+// @Param id path string true "Expense ID"
+// @Param body body expenserequest.Reject true "Rejection reason"
+// @Success 200 {object} response.Envelope{data=expenseresponse.Expense}
+// @Failure 400 {object} response.Envelope
+// @Failure 403 {object} response.Envelope
+// @Router /trips/{code}/expenses/{id}/reject [post]
 func (c *controller) reject(ctx *gin.Context) {
 	id, ok := parseID(ctx)
 	if !ok {
@@ -237,6 +298,24 @@ func (c *controller) reject(ctx *gin.Context) {
 	response.OK(ctx, "EXPENSE_REJECTED", expenseresponse.FromDomain(*entity, tc, actor(ctx).UserID))
 }
 
+// list godoc
+// @Summary List trip expenses
+// @Tags expenses
+// @Security BearerAuth
+// @Param code path string true "Trip code"
+// @Param status query string false "pending, approved, or rejected"
+// @Param currency query string false "ISO currency"
+// @Param payer_user_id query string false "Payer user ID"
+// @Param split_user_id query string false "Split participant user ID"
+// @Param date_from query string false "Start date (YYYY-MM-DD)"
+// @Param date_to query string false "End date (YYYY-MM-DD)"
+// @Param q query string false "Description search"
+// @Param sort query string false "date_desc, amount_desc, or created_desc"
+// @Param page query int false "Page"
+// @Param per_page query int false "Items per page"
+// @Success 200 {object} response.Envelope{data=[]expenseresponse.Expense}
+// @Failure 403 {object} response.Envelope
+// @Router /trips/{code}/expenses [get]
 func (c *controller) list(ctx *gin.Context) {
 	filter := expensedomain.Filter{Currency: ctx.Query("currency"), Query: ctx.Query("q"), Sort: ctx.DefaultQuery("sort", "date_desc")}
 	filter.Page, _ = strconv.Atoi(ctx.DefaultQuery("page", "1"))
@@ -284,7 +363,7 @@ func (c *controller) list(ctx *gin.Context) {
 		filter.DateTo = &value
 	}
 	tc := tripContext(ctx)
-	rows, total, err := c.expenses.List(ctx, tc, filter)
+	rows, total, totals, err := c.expenses.List(ctx, tc, filter)
 	if err != nil {
 		response.Error(ctx, err)
 		return
@@ -293,5 +372,22 @@ func (c *controller) list(ctx *gin.Context) {
 	for i := range rows {
 		result[i] = expenseresponse.FromDomain(rows[i], tc, actor(ctx).UserID)
 	}
-	response.List(ctx, "EXPENSES_FETCHED", result, response.Pagination{Page: filter.Page, PerPage: filter.PerPage, TotalItems: total, TotalPages: (int(total) + filter.PerPage - 1) / filter.PerPage})
+	byCurrency := make(map[string]string, len(totals.ByCurrency))
+	for currency, amount := range totals.ByCurrency {
+		byCurrency[currency] = amount.StringFixedBank(displayScale(currency))
+	}
+	countByStatus := make(map[string]int64, len(totals.CountByStatus))
+	for status, count := range totals.CountByStatus {
+		countByStatus[string(status)] = count
+	}
+	response.ListWithMeta(ctx, "EXPENSES_FETCHED", result, response.Pagination{Page: filter.Page, PerPage: filter.PerPage, TotalItems: total, TotalPages: (int(total) + filter.PerPage - 1) / filter.PerPage}, gin.H{"totals": gin.H{"by_currency": byCurrency, "count_by_status": countByStatus}})
+}
+
+func displayScale(currency string) int32 {
+	switch currency {
+	case "IDR", "JPY", "KRW", "VND":
+		return 0
+	default:
+		return 2
+	}
 }

@@ -11,7 +11,7 @@ import (
 type Repository interface {
 	Create(context.Context, *domainexpense.Expense) (*domainexpense.Expense, error)
 	GetByID(context.Context, uuid.UUID) (*domainexpense.Expense, error)
-	ListByTripID(context.Context, uuid.UUID, expensedomain.Filter) ([]domainexpense.Expense, int64, error)
+	ListByTripID(context.Context, uuid.UUID, expensedomain.Filter) ([]domainexpense.Expense, int64, expensedomain.Totals, error)
 	ListApprovedByTripID(context.Context, uuid.UUID) ([]domainexpense.Expense, error)
 	Update(context.Context, *domainexpense.Expense) (*domainexpense.Expense, error)
 	SoftDelete(context.Context, uuid.UUID) error

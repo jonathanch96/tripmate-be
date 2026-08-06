@@ -2,6 +2,7 @@ package expenses
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"strings"
 
@@ -12,10 +13,17 @@ import (
 	splitsdb "github.com/jblabs/tripmate-be/services/tripmate/v1/db/tripmate/expense_splits"
 	expensedomain "github.com/jblabs/tripmate-be/services/tripmate/v1/domain/expense"
 	domainexpense "github.com/jblabs/tripmate-be/services/tripmate/v1/entities/domain/expense"
+	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
 )
 
 type adapterGormPostgresql struct{ db *gorm.DB }
+
+const expenseUserSelect = `tripmate.expenses.*,
+	creator.email AS creator_email, creator.name AS creator_name, creator.avatar_url AS creator_avatar_url,
+	creator.created_at AS creator_created_at, creator.updated_at AS creator_updated_at,
+	approver.email AS approver_email, approver.name AS approver_name, approver.avatar_url AS approver_avatar_url,
+	approver.created_at AS approver_created_at, approver.updated_at AS approver_updated_at`
 
 func NewGormPostgresqlAdapter(db *gorm.DB) *adapterGormPostgresql {
 	return &adapterGormPostgresql{db: db}
@@ -33,7 +41,7 @@ func (a *adapterGormPostgresql) Create(ctx context.Context, entity *domainexpens
 
 func (a *adapterGormPostgresql) GetByID(ctx context.Context, id uuid.UUID) (*domainexpense.Expense, error) {
 	var model Expense
-	if err := appdb.FromContext(ctx, a.db).WithContext(ctx).First(&model, "id = ?", id).Error; err != nil {
+	if err := a.withUsers(appdb.FromContext(ctx, a.db).WithContext(ctx).Model(&Expense{})).Select(expenseUserSelect).Where("tripmate.expenses.id = ?", id).First(&model).Error; err != nil {
 		return nil, translate(err)
 	}
 	result := toDomain(model)
@@ -44,34 +52,42 @@ func (a *adapterGormPostgresql) GetByID(ctx context.Context, id uuid.UUID) (*dom
 	return &rows[0], nil
 }
 
-func (a *adapterGormPostgresql) ListByTripID(ctx context.Context, tripID uuid.UUID, filter expensedomain.Filter) ([]domainexpense.Expense, int64, error) {
+func (a *adapterGormPostgresql) ListByTripID(ctx context.Context, tripID uuid.UUID, filter expensedomain.Filter) ([]domainexpense.Expense, int64, expensedomain.Totals, error) {
 	if filter.Page < 1 {
 		filter.Page = 1
 	}
 	if filter.PerPage < 1 || filter.PerPage > 100 {
 		filter.PerPage = 20
 	}
-	db := appdb.FromContext(ctx, a.db).WithContext(ctx).Model(&Expense{}).Where("trip_id = ?", tripID)
+	where := []string{"e.trip_id = ?", "e.deleted_at IS NULL"}
+	args := []any{tripID}
 	if filter.PayerUserID != nil {
-		db = db.Where("id IN (SELECT expense_id FROM tripmate.expense_payers WHERE user_id = ?)", *filter.PayerUserID)
+		where = append(where, "EXISTS (SELECT 1 FROM tripmate.expense_payers p WHERE p.expense_id = e.id AND p.user_id = ?)")
+		args = append(args, *filter.PayerUserID)
 	}
 	if filter.SplitUserID != nil {
-		db = db.Where("id IN (SELECT expense_id FROM tripmate.expense_splits WHERE user_id = ?)", *filter.SplitUserID)
+		where = append(where, "EXISTS (SELECT 1 FROM tripmate.expense_splits s WHERE s.expense_id = e.id AND s.user_id = ?)")
+		args = append(args, *filter.SplitUserID)
 	}
 	if filter.Status != nil {
-		db = db.Where("status = ?", *filter.Status)
+		where = append(where, "e.status = ?")
+		args = append(args, *filter.Status)
 	}
 	if filter.Currency != "" {
-		db = db.Where("currency = ?", strings.ToUpper(filter.Currency))
+		where = append(where, "e.currency = ?")
+		args = append(args, strings.ToUpper(filter.Currency))
 	}
 	if filter.DateFrom != nil {
-		db = db.Where("expense_date >= ?", *filter.DateFrom)
+		where = append(where, "e.expense_date >= ?")
+		args = append(args, *filter.DateFrom)
 	}
 	if filter.DateTo != nil {
-		db = db.Where("expense_date <= ?", *filter.DateTo)
+		where = append(where, "e.expense_date <= ?")
+		args = append(args, *filter.DateTo)
 	}
 	if filter.Query != "" {
-		db = db.Where("description ILIKE ?", "%"+filter.Query+"%")
+		where = append(where, "e.description ILIKE ?")
+		args = append(args, "%"+filter.Query+"%")
 	}
 	order := "expense_date DESC, created_at DESC"
 	if filter.Sort == "amount_desc" {
@@ -81,26 +97,70 @@ func (a *adapterGormPostgresql) ListByTripID(ctx context.Context, tripID uuid.UU
 		order = "created_at DESC"
 	}
 	var models []Expense
-	if err := db.Select("tripmate.expenses.*, count(*) OVER() AS total_count").Order(order).Offset((filter.Page - 1) * filter.PerPage).Limit(filter.PerPage).Find(&models).Error; err != nil {
-		return nil, 0, apperror.Wrap(err, "INTERNAL_ERROR")
+	query := `WITH filtered AS (
+		SELECT e.*, creator.email AS creator_email, creator.name AS creator_name,
+			creator.avatar_url AS creator_avatar_url, creator.created_at AS creator_created_at,
+			creator.updated_at AS creator_updated_at, approver.email AS approver_email,
+			approver.name AS approver_name, approver.avatar_url AS approver_avatar_url,
+			approver.created_at AS approver_created_at, approver.updated_at AS approver_updated_at
+		FROM tripmate.expenses e
+		JOIN tripmate.users creator ON creator.id = e.created_by_user_id
+		LEFT JOIN tripmate.users approver ON approver.id = e.approved_by_user_id
+		WHERE ` + strings.Join(where, " AND ") + `
+	), windowed AS (
+		SELECT filtered.*, count(*) OVER() AS total_count,
+			sum(amount) OVER(PARTITION BY currency) AS currency_total,
+			count(*) OVER(PARTITION BY status) AS status_count
+		FROM filtered
+	)
+	SELECT windowed.*, jsonb_object_agg(currency, currency_total::text) OVER() AS currency_totals,
+		jsonb_object_agg(status, status_count) OVER() AS status_totals
+	FROM windowed ORDER BY ` + order + ` LIMIT ? OFFSET ?`
+	args = append(args, filter.PerPage, (filter.Page-1)*filter.PerPage)
+	if err := appdb.FromContext(ctx, a.db).WithContext(ctx).Raw(query, args...).Scan(&models).Error; err != nil {
+		return nil, 0, expensedomain.Totals{}, apperror.Wrap(err, "INTERNAL_ERROR")
 	}
 	var total int64
+	totals := expensedomain.Totals{ByCurrency: map[string]decimal.Decimal{}, CountByStatus: map[domainexpense.Status]int64{}}
 	if len(models) > 0 {
 		total = models[0].TotalCount
+		var currencyValues map[string]string
+		var statusValues map[string]int64
+		if err := json.Unmarshal(models[0].CurrencyTotals, &currencyValues); err != nil {
+			return nil, 0, expensedomain.Totals{}, apperror.Wrap(err, "INTERNAL_ERROR")
+		}
+		if err := json.Unmarshal(models[0].StatusTotals, &statusValues); err != nil {
+			return nil, 0, expensedomain.Totals{}, apperror.Wrap(err, "INTERNAL_ERROR")
+		}
+		for currency, raw := range currencyValues {
+			value, err := decimal.NewFromString(raw)
+			if err != nil {
+				return nil, 0, expensedomain.Totals{}, apperror.Wrap(err, "INTERNAL_ERROR")
+			}
+			totals.ByCurrency[currency] = value
+		}
+		for status, count := range statusValues {
+			totals.CountByStatus[domainexpense.Status(status)] = count
+		}
 	}
 	rows := make([]domainexpense.Expense, len(models))
 	for index, model := range models {
 		rows[index] = toDomain(model)
 	}
 	if err := a.hydrate(ctx, rows); err != nil {
-		return nil, 0, err
+		return nil, 0, expensedomain.Totals{}, err
 	}
-	return rows, total, nil
+	return rows, total, totals, nil
 }
 
 func (a *adapterGormPostgresql) ListApprovedByTripID(ctx context.Context, tripID uuid.UUID) ([]domainexpense.Expense, error) {
 	var models []Expense
-	if err := appdb.FromContext(ctx, a.db).WithContext(ctx).Where("trip_id = ? AND status = ?", tripID, domainexpense.StatusApproved).Order("expense_date, id").Find(&models).Error; err != nil {
+	query := a.withUsers(appdb.FromContext(ctx, a.db).WithContext(ctx).Model(&Expense{})).Select(`tripmate.expenses.*,
+		creator.email AS creator_email, creator.name AS creator_name, creator.avatar_url AS creator_avatar_url,
+		creator.created_at AS creator_created_at, creator.updated_at AS creator_updated_at,
+		approver.email AS approver_email, approver.name AS approver_name, approver.avatar_url AS approver_avatar_url,
+		approver.created_at AS approver_created_at, approver.updated_at AS approver_updated_at`)
+	if err := query.Where("tripmate.expenses.trip_id = ? AND tripmate.expenses.status = ?", tripID, domainexpense.StatusApproved).Order("tripmate.expenses.expense_date, tripmate.expenses.id").Find(&models).Error; err != nil {
 		return nil, apperror.Wrap(err, "INTERNAL_ERROR")
 	}
 	rows := make([]domainexpense.Expense, len(models))
@@ -111,6 +171,11 @@ func (a *adapterGormPostgresql) ListApprovedByTripID(ctx context.Context, tripID
 		return nil, err
 	}
 	return rows, nil
+}
+
+func (a *adapterGormPostgresql) withUsers(query *gorm.DB) *gorm.DB {
+	return query.Joins("JOIN tripmate.users AS creator ON creator.id = tripmate.expenses.created_by_user_id").
+		Joins("LEFT JOIN tripmate.users AS approver ON approver.id = tripmate.expenses.approved_by_user_id")
 }
 
 func (a *adapterGormPostgresql) hydrate(ctx context.Context, rows []domainexpense.Expense) error {

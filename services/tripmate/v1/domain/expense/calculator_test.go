@@ -85,6 +85,14 @@ func TestValidatePayersRequiredTable(t *testing.T) {
 	}
 }
 
+func TestEqualSplitRejectsDuplicateParticipant(t *testing.T) {
+	id := uuid.New()
+	_, err := CalculateSplits(SplitInput{Amount: decimal.NewFromInt(10), Currency: "PHP", SplitType: domainexpense.SplitEqual, Participants: []uuid.UUID{id, id}})
+	if !apperror.Is(err, "VALIDATION_FAILED") {
+		t.Fatalf("CalculateSplits(duplicate participant) error = %v", err)
+	}
+}
+
 func TestSplitAndPayerSumsAlwaysMatch(t *testing.T) {
 	rapid.Check(t, func(t *rapid.T) {
 		currency := rapid.SampledFrom([]string{"PHP", "USD", "IDR", "JPY"}).Draw(t, "currency")

@@ -43,6 +43,14 @@ func List(c *gin.Context, code string, data any, pagination Pagination) {
 	write(c, http.StatusOK, true, code, successMessage(code), data, gin.H{"pagination": pagination}, []FieldError{})
 }
 
+func ListWithMeta(c *gin.Context, code string, data any, pagination Pagination, extra gin.H) {
+	meta := gin.H{"pagination": pagination}
+	for key, value := range extra {
+		meta[key] = value
+	}
+	write(c, http.StatusOK, true, code, successMessage(code), data, meta, []FieldError{})
+}
+
 func NoData(c *gin.Context, code string) {
 	write(c, http.StatusOK, true, code, successMessage(code), nil, gin.H{}, []FieldError{})
 }

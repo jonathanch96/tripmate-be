@@ -30,11 +30,11 @@ func (m *memoryExpenses) GetByID(context.Context, uuid.UUID) (*domainexpense.Exp
 	copy := *m.row
 	return &copy, nil
 }
-func (m *memoryExpenses) ListByTripID(context.Context, uuid.UUID, Filter) ([]domainexpense.Expense, int64, error) {
+func (m *memoryExpenses) ListByTripID(context.Context, uuid.UUID, Filter) ([]domainexpense.Expense, int64, Totals, error) {
 	if m.row == nil {
-		return nil, 0, nil
+		return nil, 0, Totals{}, nil
 	}
-	return []domainexpense.Expense{*m.row}, 1, nil
+	return []domainexpense.Expense{*m.row}, 1, Totals{}, nil
 }
 func (m *memoryExpenses) ListApprovedByTripID(context.Context, uuid.UUID) ([]domainexpense.Expense, error) {
 	return nil, nil
@@ -172,5 +172,42 @@ func TestApprovalStateMachineAndRejectedEdit(t *testing.T) {
 	}
 	if len(outbox.rows) != 3 {
 		t.Fatalf("outbox rows = %d", len(outbox.rows))
+	}
+}
+
+func TestCreateCoversMutableApprovalCurrencyAndDateBoundaries(t *testing.T) {
+	svc, _, _, actor, tc, other := expenseFixture(false, domaintrip.EditOwnOnly, domainparticipant.RoleParticipant)
+	input := CreateInput{ExpenseDate: tc.Trip.StartDate.AddDate(0, 0, -7), Description: "Hotel", Amount: decimal.NewFromInt(100), Currency: "PHP", SplitType: domainexpense.SplitEqual, Payers: []domainexpense.Payer{{UserID: actor.UserID, Amount: decimal.NewFromInt(100)}}, Participants: []uuid.UUID{actor.UserID, other}}
+	created, err := svc.Create(context.Background(), actor, tc, input)
+	if err != nil || created.Status != domainexpense.StatusApproved {
+		t.Fatalf("Create(approval off, lower boundary) = %+v, %v", created, err)
+	}
+	input.ExpenseDate = tc.Trip.EndDate.AddDate(0, 0, 7)
+	if _, err = svc.Create(context.Background(), actor, tc, input); err != nil {
+		t.Fatalf("Create(upper boundary) error = %v", err)
+	}
+	tc.Trip.Settings.MultiCurrencyEnabled = true
+	input.Currency = "USD"
+	if _, err = svc.Create(context.Background(), actor, tc, input); err != nil {
+		t.Fatalf("Create(multi-currency enabled) error = %v", err)
+	}
+	tc.Trip.IsFinalized = true
+	if _, err = svc.Create(context.Background(), actor, tc, input); !apperror.Is(err, "TRIP_FINALIZED") {
+		t.Fatalf("Create(finalized) error = %v", err)
+	}
+}
+
+func TestEditingApprovedExpenseResetsApproval(t *testing.T) {
+	svc, repo, _, actor, tc, _ := expenseFixture(true, domaintrip.EditOwnOnly, domainparticipant.RoleParticipant)
+	approver := uuid.New()
+	approvedAt := time.Now().UTC()
+	repo.row = &domainexpense.Expense{ID: uuid.New(), TripID: tc.Trip.ID, ExpenseDate: tc.Trip.StartDate, Description: "Dinner", Amount: decimal.NewFromInt(10), Currency: "PHP", SplitType: domainexpense.SplitEqual, Status: domainexpense.StatusApproved, CreatedByUserID: actor.UserID, ApprovedByUserID: &approver, ApprovedAt: &approvedAt, Version: 1}
+	description := "Corrected dinner"
+	updated, err := svc.Update(context.Background(), actor, tc, repo.row.ID, UpdateInput{Description: &description, Version: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.Status != domainexpense.StatusPending || updated.ApprovedByUserID != nil || updated.ApprovedAt != nil {
+		t.Fatalf("approval was not reset: %+v", updated)
 	}
 }

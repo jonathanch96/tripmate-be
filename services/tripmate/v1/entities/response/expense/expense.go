@@ -43,6 +43,8 @@ type Expense struct {
 	RejectedReason *string    `json:"rejected_reason"`
 	CanEdit        bool       `json:"can_edit"`
 	CanDelete      bool       `json:"can_delete"`
+	CanApprove     bool       `json:"can_approve"`
+	CanReject      bool       `json:"can_reject"`
 	Version        int        `json:"version"`
 	CreatedAt      time.Time  `json:"created_at"`
 	UpdatedAt      time.Time  `json:"updated_at"`
@@ -56,6 +58,8 @@ func FromDomain(entity domainexpense.Expense, tc tripctx.TripContext, actorID uu
 		CreatedAt: entity.CreatedAt, UpdatedAt: entity.UpdatedAt}
 	allowed := tc.Participant.Role == domainparticipant.RolePlanner || tc.Trip.Settings.EditPermission == "everyone" || entity.CreatedByUserID == actorID
 	result.CanEdit, result.CanDelete = allowed, allowed
+	mayReview := tc.Participant.Role == domainparticipant.RolePlanner && entity.Status == domainexpense.StatusPending
+	result.CanApprove, result.CanReject = mayReview, mayReview
 	if entity.CreatedBy != nil {
 		value := userresponse.FromDomain(*entity.CreatedBy)
 		result.CreatedBy = &value
