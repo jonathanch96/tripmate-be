@@ -16,6 +16,6 @@ type BankInfo struct {
 }
 
 type Update struct {
-	BankInfo *BankInfo              `json:"bank_info"`
+	BankInfo *BankInfo               `json:"bank_info"`
 	Role     *domainparticipant.Role `json:"role" binding:"omitempty,oneof=planner participant"`
 }

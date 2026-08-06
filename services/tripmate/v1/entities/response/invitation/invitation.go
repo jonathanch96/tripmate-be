@@ -19,8 +19,8 @@ type Invitation struct {
 
 type InviteResult struct {
 	Status      string                           `json:"status"`
-	Invitation *Invitation                      `json:"invitation,omitempty"`
-	InviteLink string                           `json:"invite_link,omitempty"`
+	Invitation  *Invitation                      `json:"invitation,omitempty"`
+	InviteLink  string                           `json:"invite_link,omitempty"`
 	Participant *participantresponse.Participant `json:"participant,omitempty"`
 }
 

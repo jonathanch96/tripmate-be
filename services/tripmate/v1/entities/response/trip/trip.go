@@ -34,11 +34,11 @@ func FromDomain(entity domaintrip.Trip, canEditSettings bool) Trip {
 		PlannerID: entity.PlannerID, IsFinalized: entity.IsFinalized, Version: entity.Version,
 		CanEditSettings: canEditSettings,
 		Settings: Settings{
-			EditPermission: entity.Settings.EditPermission,
-			ApprovalRequiredExpenses: entity.Settings.ApprovalRequiredExpenses,
+			EditPermission:              entity.Settings.EditPermission,
+			ApprovalRequiredExpenses:    entity.Settings.ApprovalRequiredExpenses,
 			ApprovalRequiredSettlements: entity.Settings.ApprovalRequiredSettlements,
-			MultiCurrencyEnabled: entity.Settings.MultiCurrencyEnabled,
-			AllowSettlementBeforeEnd: entity.Settings.AllowSettlementBeforeEnd,
+			MultiCurrencyEnabled:        entity.Settings.MultiCurrencyEnabled,
+			AllowSettlementBeforeEnd:    entity.Settings.AllowSettlementBeforeEnd,
 		},
 	}
 }

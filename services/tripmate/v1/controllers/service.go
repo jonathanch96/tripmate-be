@@ -11,6 +11,8 @@ import (
 	"github.com/jblabs/tripmate-be/pkg/middleware"
 	"github.com/jblabs/tripmate-be/pkg/response"
 	authcontroller "github.com/jblabs/tripmate-be/services/tripmate/v1/controllers/auth"
+	invitationcontroller "github.com/jblabs/tripmate-be/services/tripmate/v1/controllers/invitation"
+	participantcontroller "github.com/jblabs/tripmate-be/services/tripmate/v1/controllers/participant"
 	tripcontroller "github.com/jblabs/tripmate-be/services/tripmate/v1/controllers/trip"
 	usercontroller "github.com/jblabs/tripmate-be/services/tripmate/v1/controllers/user"
 	refreshtokens "github.com/jblabs/tripmate-be/services/tripmate/v1/db/tripmate/refresh_tokens"
@@ -34,10 +36,12 @@ type Dependencies struct {
 }
 
 type Service struct {
-	auth   authcontroller.Controller
-	users  usercontroller.Controller
-	trip   *tripcontroller.Controller
-	issuer *appjwt.Issuer
+	auth    authcontroller.Controller
+	users   usercontroller.Controller
+	trips   tripcontroller.Controller
+	parts   participantcontroller.Controller
+	invites invitationcontroller.Controller
+	issuer  *appjwt.Issuer
 }
 
 func NewService(deps Dependencies) *Service {
@@ -55,8 +59,12 @@ func NewService(deps Dependencies) *Service {
 	tripService := tripdomain.NewService(tripdomain.Dependencies{Repo: tripRepo, Participants: partRepo, Tx: tripTransactor{deps.DB}})
 	partService := participantdomain.NewService(partRepo, tripRepo, nil)
 	inviteService := invitationdomain.NewService(invitesdb.New(deps.DB), tripRepo, userService, partService)
-	return &Service{auth: authcontroller.NewController(userService),
-		users: usercontroller.NewController(userService), trip: tripcontroller.New(tripService, partService, inviteService), issuer: issuer}
+	return &Service{
+		auth: authcontroller.NewController(userService), users: usercontroller.NewController(userService),
+		trips:   tripcontroller.NewController(tripService, partService),
+		parts:   participantcontroller.NewController(tripService, partService),
+		invites: invitationcontroller.NewController(tripService, partService, inviteService), issuer: issuer,
+	}
 }
 
 func (s *Service) RegisterRoutes(group *gin.RouterGroup) {
@@ -65,7 +73,9 @@ func (s *Service) RegisterRoutes(group *gin.RouterGroup) {
 	protected := group.Group("")
 	protected.Use(middleware.Authenticate(s.issuer))
 	s.users.RegisterRoutes(protected)
-	s.trip.RegisterRoutes(protected)
+	s.trips.RegisterRoutes(protected)
+	s.parts.RegisterRoutes(protected)
+	s.invites.RegisterRoutes(protected)
 }
 
 type tripTransactor struct{ db *gorm.DB }

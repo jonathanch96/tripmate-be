@@ -37,25 +37,27 @@ func bind(ctx *gin.Context, value any) bool {
 	return true
 }
 
-func actor(ctx *gin.Context) identity.Identity { return identity.MustFromContext(ctx.Request.Context()) }
+func actor(ctx *gin.Context) identity.Identity {
+	return identity.MustFromContext(ctx.Request.Context())
+}
 
 func createSettings(request triprequest.Create) domaintrip.Settings {
 	return domaintrip.Settings{
-		EditPermission: request.EditPermission,
-		ApprovalRequiredExpenses: request.ApprovalRequiredExpenses,
+		EditPermission:              request.EditPermission,
+		ApprovalRequiredExpenses:    request.ApprovalRequiredExpenses,
 		ApprovalRequiredSettlements: request.ApprovalRequiredSettlements,
-		MultiCurrencyEnabled: request.MultiCurrencyEnabled,
-		AllowSettlementBeforeEnd: request.AllowSettlementBeforeEnd,
+		MultiCurrencyEnabled:        request.MultiCurrencyEnabled,
+		AllowSettlementBeforeEnd:    request.AllowSettlementBeforeEnd,
 	}
 }
 
 func updateSettings(request triprequest.Update) domaintrip.Settings {
 	return domaintrip.Settings{
-		EditPermission: request.EditPermission,
-		ApprovalRequiredExpenses: request.ApprovalRequiredExpenses,
+		EditPermission:              request.EditPermission,
+		ApprovalRequiredExpenses:    request.ApprovalRequiredExpenses,
 		ApprovalRequiredSettlements: request.ApprovalRequiredSettlements,
-		MultiCurrencyEnabled: request.MultiCurrencyEnabled,
-		AllowSettlementBeforeEnd: request.AllowSettlementBeforeEnd,
+		MultiCurrencyEnabled:        request.MultiCurrencyEnabled,
+		AllowSettlementBeforeEnd:    request.AllowSettlementBeforeEnd,
 	}
 }
 

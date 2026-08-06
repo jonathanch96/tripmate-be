@@ -36,7 +36,9 @@ func bind(ctx *gin.Context, value any) bool {
 	return true
 }
 
-func actor(ctx *gin.Context) identity.Identity { return identity.MustFromContext(ctx.Request.Context()) }
+func actor(ctx *gin.Context) identity.Identity {
+	return identity.MustFromContext(ctx.Request.Context())
+}
 
 // join godoc
 // @Summary Join a trip by code
