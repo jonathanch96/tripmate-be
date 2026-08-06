@@ -4,19 +4,22 @@ import (
 	"time"
 
 	userdomain "github.com/jblabs/tripmate-be/services/tripmate/v1/domain/user"
+	invitationresponse "github.com/jblabs/tripmate-be/services/tripmate/v1/entities/response/invitation"
 	"github.com/jblabs/tripmate-be/services/tripmate/v1/entities/response/user"
 )
 
 type Session struct {
-	User                  userresponse.User `json:"user"`
-	AccessToken           string            `json:"access_token"`
-	RefreshToken          string            `json:"refresh_token"`
-	AccessTokenExpiresAt  time.Time         `json:"access_token_expires_at"`
-	RefreshTokenExpiresAt time.Time         `json:"refresh_token_expires_at"`
+	User                  userresponse.User               `json:"user"`
+	AccessToken           string                          `json:"access_token"`
+	RefreshToken          string                          `json:"refresh_token"`
+	AccessTokenExpiresAt  time.Time                       `json:"access_token_expires_at"`
+	RefreshTokenExpiresAt time.Time                       `json:"refresh_token_expires_at"`
+	PendingInvitations    []invitationresponse.Invitation `json:"pending_invitations,omitempty"`
 }
 
 func FromSession(session *userdomain.Session) Session {
 	return Session{User: userresponse.FromDomain(session.User), AccessToken: session.AccessToken,
 		RefreshToken: session.RefreshToken, AccessTokenExpiresAt: session.AccessTokenExpiresAt,
-		RefreshTokenExpiresAt: session.RefreshTokenExpiresAt}
+		RefreshTokenExpiresAt: session.RefreshTokenExpiresAt,
+		PendingInvitations:    invitationresponse.FromDomains(session.PendingInvitations)}
 }

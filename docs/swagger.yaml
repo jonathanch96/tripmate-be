@@ -42,12 +42,120 @@ definitions:
         type: string
       access_token_expires_at:
         type: string
+      pending_invitations:
+        items:
+          $ref: '#/definitions/invitationresponse.Invitation'
+        type: array
       refresh_token:
         type: string
       refresh_token_expires_at:
         type: string
       user:
         $ref: '#/definitions/userresponse.User'
+    type: object
+  invitationrequest.Create:
+    properties:
+      email:
+        maxLength: 255
+        type: string
+    required:
+    - email
+    type: object
+  invitationresponse.Invitation:
+    properties:
+      email:
+        type: string
+      expires_at:
+        type: string
+      id:
+        type: string
+      status:
+        type: string
+      token:
+        type: string
+      trip_id:
+        type: string
+    type: object
+  invitationresponse.InviteResult:
+    properties:
+      invitation:
+        $ref: '#/definitions/invitationresponse.Invitation'
+      invite_link:
+        type: string
+      participant:
+        $ref: '#/definitions/participantresponse.Participant'
+      status:
+        type: string
+    type: object
+  participantrequest.Add:
+    properties:
+      user_id:
+        type: string
+    required:
+    - user_id
+    type: object
+  participantrequest.BankInfo:
+    properties:
+      account_holder:
+        maxLength: 160
+        type: string
+      account_number:
+        maxLength: 120
+        type: string
+      bank_name:
+        maxLength: 120
+        type: string
+    required:
+    - account_holder
+    - account_number
+    - bank_name
+    type: object
+  participantrequest.Update:
+    properties:
+      bank_info:
+        $ref: '#/definitions/participantrequest.BankInfo'
+      role:
+        enum:
+        - planner
+        - participant
+        type: string
+    type: object
+  participantresponse.BankInfo:
+    properties:
+      account_holder:
+        type: string
+      account_number:
+        type: string
+      bank_name:
+        type: string
+    type: object
+  participantresponse.Participant:
+    properties:
+      bank_info:
+        $ref: '#/definitions/participantresponse.BankInfo'
+      id:
+        type: string
+      joined_at:
+        type: string
+      role:
+        type: string
+      trip_id:
+        type: string
+      user:
+        $ref: '#/definitions/participantresponse.User'
+      user_id:
+        type: string
+    type: object
+  participantresponse.User:
+    properties:
+      avatar_url:
+        type: string
+      email:
+        type: string
+      id:
+        type: string
+      name:
+        type: string
     type: object
   response.Envelope:
     properties:
@@ -77,6 +185,104 @@ definitions:
         type: string
       rule:
         type: string
+    type: object
+  triprequest.Create:
+    properties:
+      allow_settlement_before_end:
+        type: boolean
+      approval_required_expenses:
+        type: boolean
+      approval_required_settlements:
+        type: boolean
+      base_currency:
+        type: string
+      edit_permission:
+        enum:
+        - everyone
+        - own_only
+        type: string
+      end_date:
+        type: string
+      multi_currency_enabled:
+        type: boolean
+      name:
+        maxLength: 160
+        type: string
+      start_date:
+        type: string
+    required:
+    - base_currency
+    - edit_permission
+    - end_date
+    - name
+    - start_date
+    type: object
+  triprequest.Update:
+    properties:
+      allow_settlement_before_end:
+        type: boolean
+      approval_required_expenses:
+        type: boolean
+      approval_required_settlements:
+        type: boolean
+      base_currency:
+        type: string
+      edit_permission:
+        enum:
+        - everyone
+        - own_only
+        type: string
+      multi_currency_enabled:
+        type: boolean
+      name:
+        maxLength: 160
+        type: string
+      version:
+        minimum: 1
+        type: integer
+    required:
+    - base_currency
+    - edit_permission
+    - name
+    - version
+    type: object
+  tripresponse.Settings:
+    properties:
+      allow_settlement_before_end:
+        type: boolean
+      approval_required_expenses:
+        type: boolean
+      approval_required_settlements:
+        type: boolean
+      edit_permission:
+        type: string
+      multi_currency_enabled:
+        type: boolean
+    type: object
+  tripresponse.Trip:
+    properties:
+      base_currency:
+        type: string
+      can_edit_settings:
+        type: boolean
+      code:
+        type: string
+      end_date:
+        type: string
+      id:
+        type: string
+      is_finalized:
+        type: boolean
+      name:
+        type: string
+      planner_id:
+        type: string
+      settings:
+        $ref: '#/definitions/tripresponse.Settings'
+      start_date:
+        type: string
+      version:
+        type: integer
     type: object
   userrequest.Update:
     properties:
@@ -247,6 +453,15 @@ paths:
         "200":
           description: OK
           schema:
+            allOf:
+            - $ref: '#/definitions/response.Envelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/participantresponse.Participant'
+              type: object
+        "404":
+          description: Not Found
+          schema:
             $ref: '#/definitions/response.Envelope'
       security:
       - BearerAuth: []
@@ -296,11 +511,23 @@ paths:
       tags:
       - trips
     post:
+      parameters:
+      - description: Trip
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/triprequest.Create'
       responses:
         "201":
           description: Created
           schema:
-            $ref: '#/definitions/response.Envelope'
+            allOf:
+            - $ref: '#/definitions/response.Envelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/tripresponse.Trip'
+              type: object
         "400":
           description: Bad Request
           schema:
@@ -316,7 +543,12 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/response.Envelope'
+            allOf:
+            - $ref: '#/definitions/response.Envelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/tripresponse.Trip'
+              type: object
         "403":
           description: Forbidden
           schema:
@@ -327,9 +559,25 @@ paths:
       tags:
       - trips
     patch:
+      parameters:
+      - description: Trip settings
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/triprequest.Update'
       responses:
         "200":
           description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Envelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/tripresponse.Trip'
+              type: object
+        "400":
+          description: Bad Request
           schema:
             $ref: '#/definitions/response.Envelope'
         "409":
@@ -348,15 +596,35 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/response.Envelope'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.Envelope'
       security:
       - BearerAuth: []
       summary: List trip invitations
       tags:
       - invitations
     post:
+      parameters:
+      - description: Invitation
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/invitationrequest.Create'
       responses:
         "201":
           description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Envelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/invitationresponse.InviteResult'
+              type: object
+        "403":
+          description: Forbidden
           schema:
             $ref: '#/definitions/response.Envelope'
       security:
@@ -371,6 +639,10 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/response.Envelope'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.Envelope'
       security:
       - BearerAuth: []
       summary: Revoke an invitation
@@ -381,6 +653,15 @@ paths:
       responses:
         "201":
           description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Envelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/participantresponse.Participant'
+              type: object
+        "409":
+          description: Conflict
           schema:
             $ref: '#/definitions/response.Envelope'
       security:
@@ -395,15 +676,35 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/response.Envelope'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.Envelope'
       security:
       - BearerAuth: []
       summary: List trip participants
       tags:
       - participants
     post:
+      parameters:
+      - description: Participant
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/participantrequest.Add'
       responses:
         "201":
           description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Envelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/participantresponse.Participant'
+              type: object
+        "403":
+          description: Forbidden
           schema:
             $ref: '#/definitions/response.Envelope'
       security:
@@ -418,15 +719,35 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/response.Envelope'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.Envelope'
       security:
       - BearerAuth: []
       summary: Remove a participant
       tags:
       - participants
     patch:
+      parameters:
+      - description: Participant details
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/participantrequest.Update'
       responses:
         "200":
           description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Envelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/participantresponse.Participant'
+              type: object
+        "403":
+          description: Forbidden
           schema:
             $ref: '#/definitions/response.Envelope'
       security:

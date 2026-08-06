@@ -46,7 +46,19 @@ func (s *service) Register(ctx context.Context, input RegisterInput) (*Session, 
 	if err != nil {
 		return nil, err
 	}
-	return s.issueSession(ctx, *created)
+	session, err := s.issueSession(ctx, *created)
+	if err != nil {
+		return nil, err
+	}
+	if s.deps.Invitations != nil {
+		pending, lookupErr := s.deps.Invitations.ListPendingByEmail(ctx, email)
+		if lookupErr != nil {
+			slog.WarnContext(ctx, "pending invitations could not be surfaced after registration", "user_id", created.ID, "error", lookupErr)
+		} else {
+			session.PendingInvitations = pending
+		}
+	}
+	return session, nil
 }
 
 func (s *service) Authenticate(ctx context.Context, email, password string) (*Session, error) {

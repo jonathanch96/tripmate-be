@@ -49,16 +49,17 @@ func NewService(deps Dependencies) *Service {
 		AccessSecret: deps.Cfg.JWT.AccessSecret, RefreshSecret: deps.Cfg.JWT.RefreshSecret,
 		AccessTTL: deps.Cfg.JWT.AccessTTL, RefreshTTL: deps.Cfg.JWT.RefreshTTL,
 	})
+	inviteRepo := invitesdb.New(deps.DB)
 	userService := userdomain.NewService(userdomain.Dependencies{
 		Repo:   users.NewGormPostgresqlAdapter(deps.DB),
 		Tokens: refreshtokens.NewGormPostgresqlAdapter(deps.DB),
-		Hasher: apphash.NewArgon2Hasher(), Issuer: issuer,
+		Hasher: apphash.NewArgon2Hasher(), Issuer: issuer, Invitations: inviteRepo,
 	})
 	tripRepo := tripsdb.New(deps.DB)
 	partRepo := partsdb.New(deps.DB)
 	tripService := tripdomain.NewService(tripdomain.Dependencies{Repo: tripRepo, Participants: partRepo, Tx: tripTransactor{deps.DB}})
 	partService := participantdomain.NewService(partRepo, tripRepo, nil)
-	inviteService := invitationdomain.NewService(invitesdb.New(deps.DB), tripRepo, userService, partService)
+	inviteService := invitationdomain.NewService(inviteRepo, tripRepo, userService, partService)
 	return &Service{
 		auth: authcontroller.NewController(userService), users: usercontroller.NewController(userService),
 		trips:   tripcontroller.NewController(tripService, partService),

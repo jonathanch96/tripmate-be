@@ -118,7 +118,12 @@ func (c *controller) update(ctx *gin.Context) {
 			AccountHolder: request.BankInfo.AccountHolder,
 		}
 	}
-	entity, err := c.parts.Update(ctx, actor(ctx).UserID, ctx.Param("code"), id, bank, request.Role)
+	var role *domainparticipant.Role
+	if request.Role != nil {
+		value := domainparticipant.Role(*request.Role)
+		role = &value
+	}
+	entity, err := c.parts.Update(ctx, actor(ctx).UserID, ctx.Param("code"), id, bank, role)
 	if err != nil {
 		response.Error(ctx, err)
 		return

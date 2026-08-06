@@ -3,15 +3,17 @@ package user
 import (
 	"time"
 
+	domaininvitation "github.com/jblabs/tripmate-be/services/tripmate/v1/entities/domain/invitation"
 	domainuser "github.com/jblabs/tripmate-be/services/tripmate/v1/entities/domain/user"
 )
 
 type Dependencies struct {
-	Repo   Repository
-	Tokens TokenRepository
-	Hasher Hasher
-	Issuer TokenIssuer
-	Clock  func() time.Time
+	Repo        Repository
+	Tokens      TokenRepository
+	Hasher      Hasher
+	Issuer      TokenIssuer
+	Invitations InvitationFinder
+	Clock       func() time.Time
 }
 
 type service struct{ deps Dependencies }
@@ -28,4 +30,5 @@ type Session struct {
 	RefreshToken          string
 	AccessTokenExpiresAt  time.Time
 	RefreshTokenExpiresAt time.Time
+	PendingInvitations    []domaininvitation.Invitation
 }

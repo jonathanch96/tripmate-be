@@ -43,7 +43,7 @@ func actor(ctx *gin.Context) identity.Identity {
 
 func createSettings(request triprequest.Create) domaintrip.Settings {
 	return domaintrip.Settings{
-		EditPermission:              request.EditPermission,
+		EditPermission:              domaintrip.EditPermission(request.EditPermission),
 		ApprovalRequiredExpenses:    request.ApprovalRequiredExpenses,
 		ApprovalRequiredSettlements: request.ApprovalRequiredSettlements,
 		MultiCurrencyEnabled:        request.MultiCurrencyEnabled,
@@ -53,7 +53,7 @@ func createSettings(request triprequest.Create) domaintrip.Settings {
 
 func updateSettings(request triprequest.Update) domaintrip.Settings {
 	return domaintrip.Settings{
-		EditPermission:              request.EditPermission,
+		EditPermission:              domaintrip.EditPermission(request.EditPermission),
 		ApprovalRequiredExpenses:    request.ApprovalRequiredExpenses,
 		ApprovalRequiredSettlements: request.ApprovalRequiredSettlements,
 		MultiCurrencyEnabled:        request.MultiCurrencyEnabled,
@@ -65,7 +65,7 @@ func updateSettings(request triprequest.Update) domaintrip.Settings {
 // @Summary Create a trip
 // @Tags trips
 // @Security BearerAuth
-// @Param body body trip.Create true "Trip"
+// @Param body body triprequest.Create true "Trip"
 // @Success 201 {object} response.Envelope{data=tripresponse.Trip}
 // @Failure 400 {object} response.Envelope
 // @Router /trips [post]
@@ -132,7 +132,7 @@ func (c *controller) get(ctx *gin.Context) {
 // @Summary Update trip settings
 // @Tags trips
 // @Security BearerAuth
-// @Param body body trip.Update true "Trip settings"
+// @Param body body triprequest.Update true "Trip settings"
 // @Success 200 {object} response.Envelope{data=tripresponse.Trip}
 // @Failure 400 {object} response.Envelope
 // @Failure 409 {object} response.Envelope

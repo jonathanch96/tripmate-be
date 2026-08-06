@@ -1,8 +1,7 @@
-package participant
+package participantrequest
 
 import (
 	"github.com/google/uuid"
-	domainparticipant "github.com/jblabs/tripmate-be/services/tripmate/v1/entities/domain/participant"
 )
 
 type Add struct {
@@ -16,6 +15,6 @@ type BankInfo struct {
 }
 
 type Update struct {
-	BankInfo *BankInfo               `json:"bank_info"`
-	Role     *domainparticipant.Role `json:"role" binding:"omitempty,oneof=planner participant"`
+	BankInfo *BankInfo `json:"bank_info"`
+	Role     *string   `json:"role" binding:"omitempty,oneof=planner participant"`
 }

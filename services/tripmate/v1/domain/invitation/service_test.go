@@ -7,16 +7,24 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jblabs/tripmate-be/pkg/apperror"
+	"github.com/jblabs/tripmate-be/pkg/tripctx"
 	participantdomain "github.com/jblabs/tripmate-be/services/tripmate/v1/domain/participant"
 	domaininv "github.com/jblabs/tripmate-be/services/tripmate/v1/entities/domain/invitation"
 	domainparticipant "github.com/jblabs/tripmate-be/services/tripmate/v1/entities/domain/participant"
 	domaintrip "github.com/jblabs/tripmate-be/services/tripmate/v1/entities/domain/trip"
+	domainuser "github.com/jblabs/tripmate-be/services/tripmate/v1/entities/domain/user"
 )
 
-type invitationRepoStub struct{ invitation *domaininv.Invitation }
+type invitationRepoStub struct {
+	invitation *domaininv.Invitation
+	created    *domaininv.Invitation
+	listEmail  string
+	listRows   []domaininv.Invitation
+}
 
-func (r *invitationRepoStub) Create(context.Context, *domaininv.Invitation) (*domaininv.Invitation, error) {
-	panic("unexpected Create")
+func (r *invitationRepoStub) Create(_ context.Context, invitation *domaininv.Invitation) (*domaininv.Invitation, error) {
+	r.created = invitation
+	return invitation, nil
 }
 func (r *invitationRepoStub) Update(_ context.Context, invitation *domaininv.Invitation) (*domaininv.Invitation, error) {
 	r.invitation = invitation
@@ -29,8 +37,9 @@ func (r *invitationRepoStub) GetByToken(context.Context, string) (*domaininv.Inv
 func (r *invitationRepoStub) GetPending(context.Context, uuid.UUID, string) (*domaininv.Invitation, error) {
 	return nil, apperror.New("INVITATION_NOT_FOUND")
 }
-func (r *invitationRepoStub) ListPendingByEmail(context.Context, string) ([]domaininv.Invitation, error) {
-	return nil, nil
+func (r *invitationRepoStub) ListPendingByEmail(_ context.Context, email string) ([]domaininv.Invitation, error) {
+	r.listEmail = email
+	return r.listRows, nil
 }
 func (r *invitationRepoStub) ListByTrip(context.Context, uuid.UUID) ([]domaininv.Invitation, error) {
 	return nil, nil
@@ -57,6 +66,8 @@ func (r invitationTripRepoStub) GetByCode(_ context.Context, code string) (*doma
 type invitationParticipantServiceStub struct {
 	participant domainparticipant.Participant
 	joinCode    string
+	addCode     string
+	addedUser   uuid.UUID
 }
 
 func (s *invitationParticipantServiceStub) Join(_ context.Context, actor uuid.UUID, code string) (*domainparticipant.Participant, error) {
@@ -64,8 +75,36 @@ func (s *invitationParticipantServiceStub) Join(_ context.Context, actor uuid.UU
 	s.participant.UserID = actor
 	return &s.participant, nil
 }
-func (*invitationParticipantServiceStub) Add(context.Context, uuid.UUID, string, uuid.UUID) (*domainparticipant.Participant, error) {
-	panic("unexpected Add")
+func (s *invitationParticipantServiceStub) Add(_ context.Context, _ uuid.UUID, code string, userID uuid.UUID) (*domainparticipant.Participant, error) {
+	s.addCode = code
+	s.addedUser = userID
+	s.participant.UserID = userID
+	return &s.participant, nil
+}
+
+type invitationUserFinder struct {
+	user *domainuser.User
+	err  error
+}
+
+type pendingInvitationRepo struct {
+	*invitationRepoStub
+	created bool
+}
+
+func (r *pendingInvitationRepo) Create(_ context.Context, invitation *domaininv.Invitation) (*domaininv.Invitation, error) {
+	r.created = true
+	r.invitation = invitation
+	return invitation, nil
+}
+
+func (r *pendingInvitationRepo) GetPending(context.Context, uuid.UUID, string) (*domaininv.Invitation, error) {
+	copy := *r.invitation
+	return &copy, nil
+}
+
+func (f invitationUserFinder) FindByEmail(context.Context, string) (*domainuser.User, error) {
+	return f.user, f.err
 }
 func (*invitationParticipantServiceStub) List(context.Context, uuid.UUID, string) ([]domainparticipant.Participant, error) {
 	panic("unexpected List")
@@ -103,5 +142,110 @@ func TestAcceptResolvesInvitationTripThroughDeclaredRepositoryContract(t *testin
 	}
 	if repo.invitation.Status != domaininv.StatusAccepted || repo.invitation.AcceptedAt == nil {
 		t.Fatalf("invitation was not accepted: %+v", repo.invitation)
+	}
+}
+
+func TestAcceptRejectsExpiredInvitationWithoutJoining(t *testing.T) {
+	now := time.Date(2026, 8, 6, 12, 0, 0, 0, time.UTC)
+	trip := domaintrip.Trip{ID: uuid.New(), Code: "ABC123"}
+	repo := &invitationRepoStub{invitation: &domaininv.Invitation{
+		ID: uuid.New(), TripID: trip.ID, Email: "invited@example.com", Token: "expired",
+		Status: domaininv.StatusPending, ExpiresAt: now.Add(-time.Second),
+	}}
+	participants := &invitationParticipantServiceStub{}
+	service := NewService(repo, invitationTripRepoStub{trip: trip}, nil, participants).(*service)
+	service.clock = func() time.Time { return now }
+
+	_, err := service.Accept(context.Background(), uuid.New(), "invited@example.com", "expired")
+	if !apperror.Is(err, "INVITATION_NOT_FOUND") || participants.joinCode != "" {
+		t.Fatalf("Accept() error = %v, join code = %q", err, participants.joinCode)
+	}
+}
+
+func TestInviteExistingUserAddsParticipantImmediately(t *testing.T) {
+	actor := uuid.New()
+	user := &domainuser.User{ID: uuid.New(), Email: "member@example.com"}
+	trip := domaintrip.Trip{ID: uuid.New(), Code: "ABC123"}
+	planner := domainparticipant.Participant{TripID: trip.ID, UserID: actor, Role: domainparticipant.RolePlanner}
+	participants := &invitationParticipantServiceStub{participant: domainparticipant.Participant{TripID: trip.ID}}
+	service := NewService(
+		&invitationRepoStub{},
+		invitationTripRepoStub{trip: trip},
+		invitationUserFinder{user: user},
+		participants,
+	)
+	ctx := tripctx.WithContext(context.Background(), tripctx.TripContext{Trip: trip, Participant: planner})
+
+	result, err := service.Invite(ctx, actor, trip.Code, " Member@Example.com ")
+	if err != nil {
+		t.Fatalf("Invite() error = %v", err)
+	}
+	if result.Status != "added" || participants.addCode != trip.Code || participants.addedUser != user.ID {
+		t.Fatalf("Invite() = %+v, add code = %q, user = %s", result, participants.addCode, participants.addedUser)
+	}
+}
+
+func TestReinviteExtendsPendingInvitationWithoutChangingToken(t *testing.T) {
+	now := time.Date(2026, 8, 6, 12, 0, 0, 0, time.UTC)
+	actor := uuid.New()
+	trip := domaintrip.Trip{ID: uuid.New(), Code: "ABC123"}
+	planner := domainparticipant.Participant{TripID: trip.ID, UserID: actor, Role: domainparticipant.RolePlanner}
+	repo := &pendingInvitationRepo{invitationRepoStub: &invitationRepoStub{invitation: &domaininv.Invitation{
+		ID: uuid.New(), TripID: trip.ID, Email: "friend@example.com", Token: "same-token",
+		Status: domaininv.StatusPending, ExpiresAt: now.Add(time.Hour),
+	}}}
+	service := NewService(
+		repo,
+		invitationTripRepoStub{trip: trip},
+		invitationUserFinder{err: apperror.New("USER_NOT_FOUND")},
+		&invitationParticipantServiceStub{},
+	).(*service)
+	service.clock = func() time.Time { return now }
+	ctx := tripctx.WithContext(context.Background(), tripctx.TripContext{Trip: trip, Participant: planner})
+
+	result, err := service.Invite(ctx, actor, trip.Code, "FRIEND@example.com")
+	if err != nil {
+		t.Fatalf("Invite() error = %v", err)
+	}
+	if repo.created || result.Invitation.Token != "same-token" || !result.Invitation.ExpiresAt.Equal(now.Add(14*24*time.Hour)) {
+		t.Fatalf("Invite() = %+v, created = %v", result.Invitation, repo.created)
+	}
+}
+
+func TestInviteRequiresPlanner(t *testing.T) {
+	actor := uuid.New()
+	trip := domaintrip.Trip{ID: uuid.New(), Code: "ABC123"}
+	member := domainparticipant.Participant{TripID: trip.ID, UserID: actor, Role: domainparticipant.RoleParticipant}
+	ctx := tripctx.WithContext(context.Background(), tripctx.TripContext{Trip: trip, Participant: member})
+	_, err := NewService(&invitationRepoStub{}, invitationTripRepoStub{trip: trip}, invitationUserFinder{}, &invitationParticipantServiceStub{}).Invite(ctx, actor, trip.Code, "friend@example.com")
+	if !apperror.Is(err, "PLANNER_ONLY") {
+		t.Fatalf("Invite(participant) error = %v", err)
+	}
+}
+
+func TestInviteCreatesFreshPendingInvitation(t *testing.T) {
+	now := time.Date(2026, 8, 6, 12, 0, 0, 0, time.UTC)
+	actor := uuid.New()
+	trip := domaintrip.Trip{ID: uuid.New(), Code: "ABC123"}
+	planner := domainparticipant.Participant{TripID: trip.ID, UserID: actor, Role: domainparticipant.RolePlanner}
+	repo := &invitationRepoStub{}
+	service := NewService(repo, invitationTripRepoStub{trip: trip}, invitationUserFinder{err: apperror.New("USER_NOT_FOUND")}, &invitationParticipantServiceStub{}).(*service)
+	service.clock = func() time.Time { return now }
+	ctx := tripctx.WithContext(context.Background(), tripctx.TripContext{Trip: trip, Participant: planner})
+	result, err := service.Invite(ctx, actor, trip.Code, " FRIEND@example.com ")
+	if err != nil {
+		t.Fatalf("Invite() error = %v", err)
+	}
+	if result.Status != "invited" || repo.created == nil || repo.created.Email != "friend@example.com" || len(repo.created.Token) != 64 || !repo.created.ExpiresAt.Equal(now.Add(14*24*time.Hour)) {
+		t.Fatalf("created invitation = %+v", repo.created)
+	}
+}
+
+func TestListForMeNormalizesEmail(t *testing.T) {
+	repo := &invitationRepoStub{listRows: []domaininv.Invitation{{ID: uuid.New()}}}
+	service := NewService(repo, invitationTripRepoStub{}, invitationUserFinder{}, &invitationParticipantServiceStub{})
+	rows, err := service.ListForMe(context.Background(), " PERSON@Example.COM ")
+	if err != nil || len(rows) != 1 || repo.listEmail != "person@example.com" {
+		t.Fatalf("ListForMe() = %+v, %v; email = %q", rows, err, repo.listEmail)
 	}
 }

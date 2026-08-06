@@ -1,4 +1,4 @@
-package trip
+package tripresponse
 
 import (
 	"github.com/google/uuid"
@@ -6,11 +6,11 @@ import (
 )
 
 type Settings struct {
-	EditPermission              domaintrip.EditPermission `json:"edit_permission"`
-	ApprovalRequiredExpenses    bool                      `json:"approval_required_expenses"`
-	ApprovalRequiredSettlements bool                      `json:"approval_required_settlements"`
-	MultiCurrencyEnabled        bool                      `json:"multi_currency_enabled"`
-	AllowSettlementBeforeEnd    bool                      `json:"allow_settlement_before_end"`
+	EditPermission              string `json:"edit_permission"`
+	ApprovalRequiredExpenses    bool   `json:"approval_required_expenses"`
+	ApprovalRequiredSettlements bool   `json:"approval_required_settlements"`
+	MultiCurrencyEnabled        bool   `json:"multi_currency_enabled"`
+	AllowSettlementBeforeEnd    bool   `json:"allow_settlement_before_end"`
 }
 
 type Trip struct {
@@ -34,7 +34,7 @@ func FromDomain(entity domaintrip.Trip, canEditSettings bool) Trip {
 		PlannerID: entity.PlannerID, IsFinalized: entity.IsFinalized, Version: entity.Version,
 		CanEditSettings: canEditSettings,
 		Settings: Settings{
-			EditPermission:              entity.Settings.EditPermission,
+			EditPermission:              string(entity.Settings.EditPermission),
 			ApprovalRequiredExpenses:    entity.Settings.ApprovalRequiredExpenses,
 			ApprovalRequiredSettlements: entity.Settings.ApprovalRequiredSettlements,
 			MultiCurrencyEnabled:        entity.Settings.MultiCurrencyEnabled,

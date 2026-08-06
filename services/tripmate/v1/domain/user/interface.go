@@ -6,6 +6,7 @@ import (
 
 	"github.com/google/uuid"
 	appjwt "github.com/jblabs/tripmate-be/pkg/jwt"
+	domaininvitation "github.com/jblabs/tripmate-be/services/tripmate/v1/entities/domain/invitation"
 	domainuser "github.com/jblabs/tripmate-be/services/tripmate/v1/entities/domain/user"
 )
 
@@ -33,6 +34,10 @@ type TokenRepository interface {
 	GetByHash(context.Context, string) (*domainuser.RefreshToken, error)
 	Revoke(context.Context, uuid.UUID) error
 	RevokeAllForUser(context.Context, uuid.UUID) error
+}
+
+type InvitationFinder interface {
+	ListPendingByEmail(context.Context, string) ([]domaininvitation.Invitation, error)
 }
 
 type Hasher interface {

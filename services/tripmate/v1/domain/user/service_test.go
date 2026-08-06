@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jblabs/tripmate-be/pkg/apperror"
 	appjwt "github.com/jblabs/tripmate-be/pkg/jwt"
+	domaininvitation "github.com/jblabs/tripmate-be/services/tripmate/v1/entities/domain/invitation"
 	domainuser "github.com/jblabs/tripmate-be/services/tripmate/v1/entities/domain/user"
 )
 
@@ -117,6 +118,36 @@ func TestRegisterNormalizesEmailHashesPasswordAndStoresOnlyRefreshHash(t *testin
 	}
 	if len(tokens.stored) != 1 || tokens.stored[0].TokenHash == session.RefreshToken || len(tokens.stored[0].TokenHash) != 64 {
 		t.Fatalf("stored raw refresh token: %+v", tokens.stored)
+	}
+}
+
+type pendingInvitationFinderStub struct {
+	email string
+	rows  []domaininvitation.Invitation
+}
+
+func (f *pendingInvitationFinderStub) ListPendingByEmail(_ context.Context, email string) ([]domaininvitation.Invitation, error) {
+	f.email = email
+	return f.rows, nil
+}
+
+func TestRegisterSurfacesPendingInvitationsWithoutAcceptingThem(t *testing.T) {
+	service, _, _, _ := fixture()
+	pending := domaininvitation.Invitation{ID: uuid.New(), Email: "person@example.com", Status: domaininvitation.StatusPending}
+	finder := &pendingInvitationFinderStub{rows: []domaininvitation.Invitation{pending}}
+	service.deps.Invitations = finder
+
+	session, err := service.Register(context.Background(), RegisterInput{
+		Email: " Person@Example.COM ", Name: "Person", Password: "Password1",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if finder.email != "person@example.com" || len(session.PendingInvitations) != 1 {
+		t.Fatalf("pending invitations = %+v, lookup email = %q", session.PendingInvitations, finder.email)
+	}
+	if session.PendingInvitations[0].Status != domaininvitation.StatusPending || session.PendingInvitations[0].AcceptedAt != nil {
+		t.Fatalf("registration changed invitation state: %+v", session.PendingInvitations[0])
 	}
 }
 

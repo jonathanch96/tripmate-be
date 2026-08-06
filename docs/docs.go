@@ -255,6 +255,24 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/response.Envelope"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/participantresponse.Participant"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
                             "$ref": "#/definitions/response.Envelope"
                         }
                     }
@@ -317,11 +335,34 @@ const docTemplate = `{
                     "trips"
                 ],
                 "summary": "Create a trip",
+                "parameters": [
+                    {
+                        "description": "Trip",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/triprequest.Create"
+                        }
+                    }
+                ],
                 "responses": {
                     "201": {
                         "description": "Created",
                         "schema": {
-                            "$ref": "#/definitions/response.Envelope"
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/response.Envelope"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/tripresponse.Trip"
+                                        }
+                                    }
+                                }
+                            ]
                         }
                     },
                     "400": {
@@ -348,7 +389,19 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/response.Envelope"
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/response.Envelope"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/tripresponse.Trip"
+                                        }
+                                    }
+                                }
+                            ]
                         }
                     },
                     "403": {
@@ -369,9 +422,38 @@ const docTemplate = `{
                     "trips"
                 ],
                 "summary": "Update trip settings",
+                "parameters": [
+                    {
+                        "description": "Trip settings",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/triprequest.Update"
+                        }
+                    }
+                ],
                 "responses": {
                     "200": {
                         "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/response.Envelope"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/tripresponse.Trip"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
                         "schema": {
                             "$ref": "#/definitions/response.Envelope"
                         }
@@ -402,6 +484,12 @@ const docTemplate = `{
                         "schema": {
                             "$ref": "#/definitions/response.Envelope"
                         }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/response.Envelope"
+                        }
                     }
                 }
             },
@@ -415,9 +503,38 @@ const docTemplate = `{
                     "invitations"
                 ],
                 "summary": "Invite by email",
+                "parameters": [
+                    {
+                        "description": "Invitation",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/invitationrequest.Create"
+                        }
+                    }
+                ],
                 "responses": {
                     "201": {
                         "description": "Created",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/response.Envelope"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/invitationresponse.InviteResult"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
                         "schema": {
                             "$ref": "#/definitions/response.Envelope"
                         }
@@ -442,6 +559,12 @@ const docTemplate = `{
                         "schema": {
                             "$ref": "#/definitions/response.Envelope"
                         }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/response.Envelope"
+                        }
                     }
                 }
             }
@@ -460,6 +583,24 @@ const docTemplate = `{
                 "responses": {
                     "201": {
                         "description": "Created",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/response.Envelope"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/participantresponse.Participant"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
                         "schema": {
                             "$ref": "#/definitions/response.Envelope"
                         }
@@ -484,6 +625,12 @@ const docTemplate = `{
                         "schema": {
                             "$ref": "#/definitions/response.Envelope"
                         }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/response.Envelope"
+                        }
                     }
                 }
             },
@@ -497,9 +644,38 @@ const docTemplate = `{
                     "participants"
                 ],
                 "summary": "Add a participant",
+                "parameters": [
+                    {
+                        "description": "Participant",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/participantrequest.Add"
+                        }
+                    }
+                ],
                 "responses": {
                     "201": {
                         "description": "Created",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/response.Envelope"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/participantresponse.Participant"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
                         "schema": {
                             "$ref": "#/definitions/response.Envelope"
                         }
@@ -524,6 +700,12 @@ const docTemplate = `{
                         "schema": {
                             "$ref": "#/definitions/response.Envelope"
                         }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/response.Envelope"
+                        }
                     }
                 }
             },
@@ -537,9 +719,38 @@ const docTemplate = `{
                     "participants"
                 ],
                 "summary": "Update participant details",
+                "parameters": [
+                    {
+                        "description": "Participant details",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/participantrequest.Update"
+                        }
+                    }
+                ],
                 "responses": {
                     "200": {
                         "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/response.Envelope"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/participantresponse.Participant"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
                         "schema": {
                             "$ref": "#/definitions/response.Envelope"
                         }
@@ -768,6 +979,12 @@ const docTemplate = `{
                 "access_token_expires_at": {
                     "type": "string"
                 },
+                "pending_invitations": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/invitationresponse.Invitation"
+                    }
+                },
                 "refresh_token": {
                     "type": "string"
                 },
@@ -776,6 +993,163 @@ const docTemplate = `{
                 },
                 "user": {
                     "$ref": "#/definitions/userresponse.User"
+                }
+            }
+        },
+        "invitationrequest.Create": {
+            "type": "object",
+            "required": [
+                "email"
+            ],
+            "properties": {
+                "email": {
+                    "type": "string",
+                    "maxLength": 255
+                }
+            }
+        },
+        "invitationresponse.Invitation": {
+            "type": "object",
+            "properties": {
+                "email": {
+                    "type": "string"
+                },
+                "expires_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "token": {
+                    "type": "string"
+                },
+                "trip_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "invitationresponse.InviteResult": {
+            "type": "object",
+            "properties": {
+                "invitation": {
+                    "$ref": "#/definitions/invitationresponse.Invitation"
+                },
+                "invite_link": {
+                    "type": "string"
+                },
+                "participant": {
+                    "$ref": "#/definitions/participantresponse.Participant"
+                },
+                "status": {
+                    "type": "string"
+                }
+            }
+        },
+        "participantrequest.Add": {
+            "type": "object",
+            "required": [
+                "user_id"
+            ],
+            "properties": {
+                "user_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "participantrequest.BankInfo": {
+            "type": "object",
+            "required": [
+                "account_holder",
+                "account_number",
+                "bank_name"
+            ],
+            "properties": {
+                "account_holder": {
+                    "type": "string",
+                    "maxLength": 160
+                },
+                "account_number": {
+                    "type": "string",
+                    "maxLength": 120
+                },
+                "bank_name": {
+                    "type": "string",
+                    "maxLength": 120
+                }
+            }
+        },
+        "participantrequest.Update": {
+            "type": "object",
+            "properties": {
+                "bank_info": {
+                    "$ref": "#/definitions/participantrequest.BankInfo"
+                },
+                "role": {
+                    "type": "string",
+                    "enum": [
+                        "planner",
+                        "participant"
+                    ]
+                }
+            }
+        },
+        "participantresponse.BankInfo": {
+            "type": "object",
+            "properties": {
+                "account_holder": {
+                    "type": "string"
+                },
+                "account_number": {
+                    "type": "string"
+                },
+                "bank_name": {
+                    "type": "string"
+                }
+            }
+        },
+        "participantresponse.Participant": {
+            "type": "object",
+            "properties": {
+                "bank_info": {
+                    "$ref": "#/definitions/participantresponse.BankInfo"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "joined_at": {
+                    "type": "string"
+                },
+                "role": {
+                    "type": "string"
+                },
+                "trip_id": {
+                    "type": "string"
+                },
+                "user": {
+                    "$ref": "#/definitions/participantresponse.User"
+                },
+                "user_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "participantresponse.User": {
+            "type": "object",
+            "properties": {
+                "avatar_url": {
+                    "type": "string"
+                },
+                "email": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
                 }
             }
         },
@@ -819,6 +1193,149 @@ const docTemplate = `{
                 },
                 "rule": {
                     "type": "string"
+                }
+            }
+        },
+        "triprequest.Create": {
+            "type": "object",
+            "required": [
+                "base_currency",
+                "edit_permission",
+                "end_date",
+                "name",
+                "start_date"
+            ],
+            "properties": {
+                "allow_settlement_before_end": {
+                    "type": "boolean"
+                },
+                "approval_required_expenses": {
+                    "type": "boolean"
+                },
+                "approval_required_settlements": {
+                    "type": "boolean"
+                },
+                "base_currency": {
+                    "type": "string"
+                },
+                "edit_permission": {
+                    "type": "string",
+                    "enum": [
+                        "everyone",
+                        "own_only"
+                    ]
+                },
+                "end_date": {
+                    "type": "string"
+                },
+                "multi_currency_enabled": {
+                    "type": "boolean"
+                },
+                "name": {
+                    "type": "string",
+                    "maxLength": 160
+                },
+                "start_date": {
+                    "type": "string"
+                }
+            }
+        },
+        "triprequest.Update": {
+            "type": "object",
+            "required": [
+                "base_currency",
+                "edit_permission",
+                "name",
+                "version"
+            ],
+            "properties": {
+                "allow_settlement_before_end": {
+                    "type": "boolean"
+                },
+                "approval_required_expenses": {
+                    "type": "boolean"
+                },
+                "approval_required_settlements": {
+                    "type": "boolean"
+                },
+                "base_currency": {
+                    "type": "string"
+                },
+                "edit_permission": {
+                    "type": "string",
+                    "enum": [
+                        "everyone",
+                        "own_only"
+                    ]
+                },
+                "multi_currency_enabled": {
+                    "type": "boolean"
+                },
+                "name": {
+                    "type": "string",
+                    "maxLength": 160
+                },
+                "version": {
+                    "type": "integer",
+                    "minimum": 1
+                }
+            }
+        },
+        "tripresponse.Settings": {
+            "type": "object",
+            "properties": {
+                "allow_settlement_before_end": {
+                    "type": "boolean"
+                },
+                "approval_required_expenses": {
+                    "type": "boolean"
+                },
+                "approval_required_settlements": {
+                    "type": "boolean"
+                },
+                "edit_permission": {
+                    "type": "string"
+                },
+                "multi_currency_enabled": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "tripresponse.Trip": {
+            "type": "object",
+            "properties": {
+                "base_currency": {
+                    "type": "string"
+                },
+                "can_edit_settings": {
+                    "type": "boolean"
+                },
+                "code": {
+                    "type": "string"
+                },
+                "end_date": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "is_finalized": {
+                    "type": "boolean"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "planner_id": {
+                    "type": "string"
+                },
+                "settings": {
+                    "$ref": "#/definitions/tripresponse.Settings"
+                },
+                "start_date": {
+                    "type": "string"
+                },
+                "version": {
+                    "type": "integer"
                 }
             }
         },
