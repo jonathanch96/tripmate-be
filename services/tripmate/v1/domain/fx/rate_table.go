@@ -43,4 +43,19 @@ func (t *RateTable) Convert(amount decimal.Decimal, from, to string) (decimal.De
 	return decimal.Zero, apperror.Newf("EXCHANGE_RATE_MISSING", "Exchange rate %s→%s is required", from, to)
 }
 
+// Lookup returns the effective stored rate for a pair. For reverse
+// conversions it returns the stored inverse pair; identity conversions do not
+// require a rate and return false.
+func (t *RateTable) Lookup(from, to string) (domainfx.Rate, bool) {
+	from, to = normalize(from), normalize(to)
+	if from == to {
+		return domainfx.Rate{}, false
+	}
+	if rate, ok := t.rates[pairKey{from: from, to: to}]; ok {
+		return rate, true
+	}
+	rate, ok := t.rates[pairKey{from: to, to: from}]
+	return rate, ok
+}
+
 func normalize(currency string) string { return strings.ToUpper(strings.TrimSpace(currency)) }

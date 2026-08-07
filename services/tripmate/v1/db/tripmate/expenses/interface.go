@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/google/uuid"
+	balancedomain "github.com/jblabs/tripmate-be/services/tripmate/v1/domain/balance"
 	expensedomain "github.com/jblabs/tripmate-be/services/tripmate/v1/domain/expense"
 	domainexpense "github.com/jblabs/tripmate-be/services/tripmate/v1/entities/domain/expense"
 )
@@ -13,6 +14,7 @@ type Repository interface {
 	GetByID(context.Context, uuid.UUID) (*domainexpense.Expense, error)
 	ListByTripID(context.Context, uuid.UUID, expensedomain.Filter) ([]domainexpense.Expense, int64, expensedomain.Totals, error)
 	ListApprovedByTripID(context.Context, uuid.UUID) ([]domainexpense.Expense, error)
+	ListForBalance(context.Context, uuid.UUID) ([]domainexpense.Expense, error)
 	Update(context.Context, *domainexpense.Expense) (*domainexpense.Expense, error)
 	SoftDelete(context.Context, uuid.UUID) error
 	CountByTripAndUser(context.Context, uuid.UUID, uuid.UUID) (int64, error)
@@ -21,3 +23,4 @@ type Repository interface {
 
 var _ Repository = (*adapterGormPostgresql)(nil)
 var _ expensedomain.Repository = (*adapterGormPostgresql)(nil)
+var _ balancedomain.ExpenseRepository = (*adapterGormPostgresql)(nil)

@@ -173,6 +173,22 @@ func (a *adapterGormPostgresql) ListApprovedByTripID(ctx context.Context, tripID
 	return rows, nil
 }
 
+func (a *adapterGormPostgresql) ListForBalance(ctx context.Context, tripID uuid.UUID) ([]domainexpense.Expense, error) {
+	var models []Expense
+	query := a.withUsers(appdb.FromContext(ctx, a.db).WithContext(ctx).Model(&Expense{})).Select(expenseUserSelect)
+	if err := query.Where("tripmate.expenses.trip_id = ?", tripID).Order("tripmate.expenses.id").Find(&models).Error; err != nil {
+		return nil, apperror.Wrap(err, "INTERNAL_ERROR")
+	}
+	rows := make([]domainexpense.Expense, len(models))
+	for index, model := range models {
+		rows[index] = toDomain(model)
+	}
+	if err := a.hydrate(ctx, rows); err != nil {
+		return nil, err
+	}
+	return rows, nil
+}
+
 func (a *adapterGormPostgresql) withUsers(query *gorm.DB) *gorm.DB {
 	return query.Joins("JOIN tripmate.users AS creator ON creator.id = tripmate.expenses.created_by_user_id").
 		Joins("LEFT JOIN tripmate.users AS approver ON approver.id = tripmate.expenses.approved_by_user_id")

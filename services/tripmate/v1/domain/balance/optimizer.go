@@ -2,6 +2,7 @@ package balance
 
 import (
 	"bytes"
+	"log/slog"
 	"sort"
 	"strings"
 
@@ -30,7 +31,8 @@ func Optimize(balances []domainbalance.ParticipantBalance, currency string) []do
 		}
 	}
 	result := make([]domainbalance.Transfer, 0, len(balances)-1)
-	for iteration := 0; len(debtors) > 0 && len(creditors) > 0 && iteration < 2*len(balances); iteration++ {
+	iteration := 0
+	for ; len(debtors) > 0 && len(creditors) > 0 && iteration < 2*len(balances); iteration++ {
 		sortPositions(debtors)
 		sortPositions(creditors)
 		amount := decimal.Min(debtors[0].amount, creditors[0].amount)
@@ -46,6 +48,9 @@ func Optimize(balances []domainbalance.ParticipantBalance, currency string) []do
 		if money.IsZero(creditors[0].amount) {
 			creditors = creditors[1:]
 		}
+	}
+	if iteration == 2*len(balances) && len(debtors) > 0 && len(creditors) > 0 {
+		slog.Error("settlement optimizer reached iteration cap", "participants", len(balances), "remaining_debtors", len(debtors), "remaining_creditors", len(creditors))
 	}
 	return result
 }
