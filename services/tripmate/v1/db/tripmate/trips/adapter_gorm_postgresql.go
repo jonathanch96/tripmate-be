@@ -6,6 +6,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jblabs/tripmate-be/pkg/apperror"
+	appdb "github.com/jblabs/tripmate-be/services/tripmate/v1/db"
 	tripdomain "github.com/jblabs/tripmate-be/services/tripmate/v1/domain/trip"
 	domaintrip "github.com/jblabs/tripmate-be/services/tripmate/v1/entities/domain/trip"
 	"gorm.io/gorm"
@@ -15,6 +16,23 @@ type adapterGormPostgresql struct{ db *gorm.DB }
 
 func NewGormPostgresqlAdapter(db *gorm.DB) *adapterGormPostgresql {
 	return &adapterGormPostgresql{db: db}
+}
+
+func (a *adapterGormPostgresql) SetFinalized(ctx context.Context, id uuid.UUID, finalized bool) error {
+	values := map[string]any{"is_finalized": finalized, "version": gorm.Expr("version + 1"), "updated_at": gorm.Expr("now()")}
+	if finalized {
+		values["finalized_at"] = gorm.Expr("now()")
+	} else {
+		values["finalized_at"] = nil
+	}
+	result := appdb.FromContext(ctx, a.db).WithContext(ctx).Model(&Trip{}).Where("id = ?", id).Updates(values)
+	if result.Error != nil {
+		return apperror.Wrap(result.Error, "INTERNAL_ERROR")
+	}
+	if result.RowsAffected == 0 {
+		return apperror.New("TRIP_NOT_FOUND")
+	}
+	return nil
 }
 
 func New(db *gorm.DB) *adapterGormPostgresql { return NewGormPostgresqlAdapter(db) }

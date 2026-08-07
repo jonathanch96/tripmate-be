@@ -132,3 +132,25 @@ func TestCalculateAlwaysBalancesToZero(t *testing.T) {
 		}
 	})
 }
+
+func TestFinalSettlementExposesFullBankDetailsOnlyToPayerOrPlanner(t *testing.T) {
+	a, b, c := uuid.New(), uuid.New(), uuid.New()
+	participants := participantRows{participant(a, "Ana"), participant(b, "Ben"), participant(c, "Cara")}
+	participants[1].BankInfo = &domainparticipant.BankInfo{BankName: "Bank", AccountNumber: "12345678", AccountHolder: "Ben"}
+	expenses := expenseRows{{Amount: decimal.NewFromInt(100), Currency: "PHP", Status: domainexpense.StatusApproved, Payers: []domainexpense.Payer{{UserID: b, Amount: decimal.NewFromInt(100)}}, Splits: []domainexpense.Split{{UserID: a, Amount: decimal.NewFromInt(100)}}}}
+	service := balancedomain.NewService(balancedomain.Dependencies{Expenses: expenses, Settlements: settlementRows{}, Participants: participants, FX: tableProvider{table: fxdomain.NewRateTable(nil)}})
+	trip := domaintrip.Trip{ID: uuid.New(), BaseCurrency: "PHP"}
+
+	payerPlan, err := service.FinalSettlement(context.Background(), tripctx.TripContext{Trip: trip, Participant: domainparticipant.Participant{UserID: a, Role: domainparticipant.RoleParticipant}})
+	if err != nil || len(payerPlan.Transfers) != 1 || payerPlan.Transfers[0].BankAccountNumber == nil || *payerPlan.Transfers[0].BankAccountNumber != "12345678" {
+		t.Fatalf("payer plan=%+v err=%v", payerPlan, err)
+	}
+	bystanderPlan, err := service.FinalSettlement(context.Background(), tripctx.TripContext{Trip: trip, Participant: domainparticipant.Participant{UserID: c, Role: domainparticipant.RoleParticipant}})
+	if err != nil || bystanderPlan.Transfers[0].BankAccountNumber != nil {
+		t.Fatalf("bystander plan=%+v err=%v", bystanderPlan, err)
+	}
+	plannerPlan, err := service.FinalSettlement(context.Background(), tripctx.TripContext{Trip: trip, Participant: domainparticipant.Participant{UserID: c, Role: domainparticipant.RolePlanner}})
+	if err != nil || plannerPlan.Transfers[0].BankAccountNumber == nil {
+		t.Fatalf("planner plan=%+v err=%v", plannerPlan, err)
+	}
+}

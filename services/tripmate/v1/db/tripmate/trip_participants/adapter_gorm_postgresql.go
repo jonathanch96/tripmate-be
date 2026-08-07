@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jblabs/tripmate-be/pkg/apperror"
+	appdb "github.com/jblabs/tripmate-be/services/tripmate/v1/db"
 	domainparticipant "github.com/jblabs/tripmate-be/services/tripmate/v1/entities/domain/participant"
 	"gorm.io/gorm"
 )
@@ -52,7 +53,7 @@ func (a *adapterGormPostgresql) GetByID(ctx context.Context, id uuid.UUID) (*dom
 
 func (a *adapterGormPostgresql) ListByTripID(ctx context.Context, tripID uuid.UUID) ([]domainparticipant.Participant, error) {
 	var rows []participantWithUser
-	if err := a.db.WithContext(ctx).Table("tripmate.trip_participants p").
+	if err := appdb.FromContext(ctx, a.db).WithContext(ctx).Table("tripmate.trip_participants p").
 		Select("p.*, u.email, u.name, u.avatar_url, u.created_at user_created_at, u.updated_at user_updated_at").
 		Joins("JOIN tripmate.users u ON u.id = p.user_id AND u.deleted_at IS NULL").
 		Where("p.trip_id = ? AND p.deleted_at IS NULL", tripID).Order("p.joined_at").Scan(&rows).Error; err != nil {

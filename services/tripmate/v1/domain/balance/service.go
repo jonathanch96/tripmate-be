@@ -13,6 +13,7 @@ import (
 	fxdomain "github.com/jblabs/tripmate-be/services/tripmate/v1/domain/fx"
 	domainbalance "github.com/jblabs/tripmate-be/services/tripmate/v1/entities/domain/balance"
 	domainexpense "github.com/jblabs/tripmate-be/services/tripmate/v1/entities/domain/expense"
+	domainparticipant "github.com/jblabs/tripmate-be/services/tripmate/v1/entities/domain/participant"
 	domainsettlement "github.com/jblabs/tripmate-be/services/tripmate/v1/entities/domain/settlement"
 	domaintrip "github.com/jblabs/tripmate-be/services/tripmate/v1/entities/domain/trip"
 	domainuser "github.com/jblabs/tripmate-be/services/tripmate/v1/entities/domain/user"
@@ -178,7 +179,29 @@ func (s *service) FinalSettlement(ctx context.Context, tc tripctx.TripContext) (
 	if err != nil {
 		return nil, err
 	}
-	return &domainbalance.FinalPlan{BaseCurrency: result.BaseCurrency, Transfers: result.Debts}, nil
+	participants, err := s.deps.Participants.ListByTripID(ctx, tc.Trip.ID)
+	if err != nil {
+		return nil, err
+	}
+	bankByUser := make(map[uuid.UUID]*domainparticipant.BankInfo, len(participants))
+	for _, participant := range participants {
+		bankByUser[participant.UserID] = participant.BankInfo
+	}
+	transfers := append([]domainbalance.Transfer(nil), result.Debts...)
+	for i := range transfers {
+		// Full bank details are restricted to the payer and planner on this view.
+		if tc.Participant.Role != domainparticipant.RolePlanner && tc.Participant.UserID != transfers[i].FromUserID {
+			continue
+		}
+		bank := bankByUser[transfers[i].ToUserID]
+		if bank == nil {
+			continue
+		}
+		transfers[i].BankName = &bank.BankName
+		transfers[i].BankAccountNumber = &bank.AccountNumber
+		transfers[i].BankAccountHolder = &bank.AccountHolder
+	}
+	return &domainbalance.FinalPlan{BaseCurrency: result.BaseCurrency, Transfers: transfers}, nil
 }
 
 func validateRates(table *fxdomain.RateTable, trip domaintrip.Trip, expenses []domainexpense.Expense, settlements []domainsettlement.Settlement) error {

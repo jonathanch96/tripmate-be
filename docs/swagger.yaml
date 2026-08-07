@@ -239,6 +239,32 @@ definitions:
       updated_at:
         type: string
     type: object
+  finance.rateRequest:
+    properties:
+      from:
+        type: string
+      rate:
+        type: string
+      to:
+        type: string
+    type: object
+  finance.settlementRequest:
+    properties:
+      amount:
+        type: string
+      currency:
+        type: string
+      from_user_id:
+        type: string
+      method:
+        type: string
+      note:
+        type: string
+      proof_url:
+        type: string
+      to_user_id:
+        type: string
+    type: object
   invitationrequest.Create:
     properties:
       email:
@@ -633,6 +659,18 @@ paths:
       summary: Register a new account
       tags:
       - auth
+  /exchange-rates:
+    get:
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      security:
+      - BearerAuth: []
+      summary: List global exchange rates
+      tags:
+      - finance
   /invitations/{token}/accept:
     post:
       responses:
@@ -775,6 +813,73 @@ paths:
       summary: Update trip settings
       tags:
       - trips
+  /trips/{code}/balances:
+    get:
+      parameters:
+      - description: Trip code
+        in: path
+        name: code
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      security:
+      - BearerAuth: []
+      summary: Calculate trip balances
+      tags:
+      - finance
+  /trips/{code}/exchange-rates:
+    get:
+      parameters:
+      - description: Trip code
+        in: path
+        name: code
+        required: true
+        type: string
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      security:
+      - BearerAuth: []
+      summary: List effective trip exchange rates
+      tags:
+      - finance
+    put:
+      consumes:
+      - application/json
+      parameters:
+      - description: Trip code
+        in: path
+        name: code
+        required: true
+        type: string
+      - description: Rate
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/finance.rateRequest'
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      security:
+      - BearerAuth: []
+      summary: Set a locked trip exchange rate
+      tags:
+      - finance
   /trips/{code}/expenses:
     get:
       parameters:
@@ -1053,6 +1158,44 @@ paths:
       summary: Reject a pending expense
       tags:
       - expenses
+  /trips/{code}/final-settlement:
+    get:
+      parameters:
+      - description: Trip code
+        in: path
+        name: code
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      security:
+      - BearerAuth: []
+      summary: Get optimized final settlement plan
+      tags:
+      - finance
+  /trips/{code}/finalize:
+    post:
+      parameters:
+      - description: Trip code
+        in: path
+        name: code
+        required: true
+        type: string
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      security:
+      - BearerAuth: []
+      summary: Finalize a trip and lock rates
+      tags:
+      - finance
   /trips/{code}/invitations:
     get:
       responses:
@@ -1219,6 +1362,150 @@ paths:
       summary: Update participant details
       tags:
       - participants
+  /trips/{code}/settlements:
+    get:
+      parameters:
+      - description: Trip code
+        in: path
+        name: code
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      security:
+      - BearerAuth: []
+      summary: List trip settlements
+      tags:
+      - settlements
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Trip code
+        in: path
+        name: code
+        required: true
+        type: string
+      - description: Settlement
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/finance.settlementRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      security:
+      - BearerAuth: []
+      summary: Record a settlement
+      tags:
+      - settlements
+  /trips/{code}/settlements/{id}:
+    delete:
+      parameters:
+      - description: Trip code
+        in: path
+        name: code
+        required: true
+        type: string
+      - description: Settlement ID
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      security:
+      - BearerAuth: []
+      summary: Delete a non-approved settlement
+      tags:
+      - settlements
+  /trips/{code}/settlements/{id}/approve:
+    post:
+      parameters:
+      - description: Trip code
+        in: path
+        name: code
+        required: true
+        type: string
+      - description: Settlement ID
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      security:
+      - BearerAuth: []
+      summary: Approve a pending settlement
+      tags:
+      - settlements
+  /trips/{code}/settlements/{id}/reject:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Trip code
+        in: path
+        name: code
+        required: true
+        type: string
+      - description: Settlement ID
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      security:
+      - BearerAuth: []
+      summary: Reject a pending settlement
+      tags:
+      - settlements
+  /trips/{code}/unfinalize:
+    post:
+      parameters:
+      - description: Trip code
+        in: path
+        name: code
+        required: true
+        type: string
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      security:
+      - BearerAuth: []
+      summary: Reopen a finalized trip while retaining locked rates
+      tags:
+      - finance
   /users/lookup:
     get:
       parameters:

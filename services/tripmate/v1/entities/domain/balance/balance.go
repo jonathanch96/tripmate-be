@@ -16,6 +16,9 @@ type Transfer struct {
 	FromUserID, ToUserID uuid.UUID
 	Amount               decimal.Decimal
 	Currency             string
+	BankName             *string
+	BankAccountNumber    *string
+	BankAccountHolder    *string
 }
 
 type Summary struct {
