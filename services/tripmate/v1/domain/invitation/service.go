@@ -4,6 +4,10 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"log/slog"
+	"strings"
+	"time"
+
 	"github.com/google/uuid"
 	"github.com/jblabs/tripmate-be/pkg/apperror"
 	"github.com/jblabs/tripmate-be/pkg/tripctx"
@@ -12,9 +16,6 @@ import (
 	domainparticipant "github.com/jblabs/tripmate-be/services/tripmate/v1/entities/domain/participant"
 	domaintrip "github.com/jblabs/tripmate-be/services/tripmate/v1/entities/domain/trip"
 	domainuser "github.com/jblabs/tripmate-be/services/tripmate/v1/entities/domain/user"
-	"log/slog"
-	"strings"
-	"time"
 )
 
 type Repository interface {

@@ -5,7 +5,7 @@ import (
 
 	userdomain "github.com/jblabs/tripmate-be/services/tripmate/v1/domain/user"
 	invitationresponse "github.com/jblabs/tripmate-be/services/tripmate/v1/entities/response/invitation"
-	"github.com/jblabs/tripmate-be/services/tripmate/v1/entities/response/user"
+	userresponse "github.com/jblabs/tripmate-be/services/tripmate/v1/entities/response/user"
 )
 
 type Session struct {

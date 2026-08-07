@@ -58,12 +58,16 @@ func lint(root string) ([]string, error) {
 	return violations, nil
 }
 
-func modulePath(goModPath string) (string, error) {
+func modulePath(goModPath string) (module string, err error) {
 	file, err := os.Open(goModPath)
 	if err != nil {
 		return "", fmt.Errorf("open go.mod: %w", err)
 	}
-	defer file.Close()
+	defer func() {
+		if closeErr := file.Close(); closeErr != nil && err == nil {
+			err = fmt.Errorf("close go.mod: %w", closeErr)
+		}
+	}()
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
 		fields := strings.Fields(scanner.Text())

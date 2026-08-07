@@ -84,7 +84,7 @@ func CORS(options CORSOptions) gin.HandlerFunc {
 			c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
 		}
 		if c.Request.Method == http.MethodOptions {
-			if origin != "" && !exact && !(wildcard && !options.Production) {
+			if origin != "" && !exact && (!wildcard || options.Production) {
 				c.AbortWithStatus(http.StatusForbidden)
 				return
 			}

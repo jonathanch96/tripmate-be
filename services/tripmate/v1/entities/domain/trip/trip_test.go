@@ -1,10 +1,11 @@
 package trip
 
 import (
-	"github.com/google/uuid"
-	"github.com/jblabs/tripmate-be/pkg/apperror"
 	"testing"
 	"time"
+
+	"github.com/google/uuid"
+	"github.com/jblabs/tripmate-be/pkg/apperror"
 )
 
 func TestCanEditTruthTable(t *testing.T) {

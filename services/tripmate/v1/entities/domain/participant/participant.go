@@ -1,9 +1,10 @@
 package participant
 
 import (
+	"time"
+
 	"github.com/google/uuid"
 	domainuser "github.com/jblabs/tripmate-be/services/tripmate/v1/entities/domain/user"
-	"time"
 )
 
 type Role string

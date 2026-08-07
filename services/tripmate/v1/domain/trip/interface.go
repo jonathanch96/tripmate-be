@@ -2,6 +2,7 @@ package trip
 
 import (
 	"context"
+
 	"github.com/google/uuid"
 	domainparticipant "github.com/jblabs/tripmate-be/services/tripmate/v1/entities/domain/participant"
 	domaintrip "github.com/jblabs/tripmate-be/services/tripmate/v1/entities/domain/trip"

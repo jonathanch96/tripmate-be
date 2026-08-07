@@ -2,13 +2,14 @@ package participant
 
 import (
 	"context"
+	"strings"
+	"time"
+
 	"github.com/google/uuid"
 	"github.com/jblabs/tripmate-be/pkg/apperror"
 	"github.com/jblabs/tripmate-be/pkg/tripctx"
 	domainparticipant "github.com/jblabs/tripmate-be/services/tripmate/v1/entities/domain/participant"
 	domaintrip "github.com/jblabs/tripmate-be/services/tripmate/v1/entities/domain/trip"
-	"strings"
-	"time"
 )
 
 type Repository interface {

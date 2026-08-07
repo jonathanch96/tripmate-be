@@ -186,6 +186,11 @@ func TestCreateCoversMutableApprovalCurrencyAndDateBoundaries(t *testing.T) {
 	if _, err = svc.Create(context.Background(), actor, tc, input); err != nil {
 		t.Fatalf("Create(upper boundary) error = %v", err)
 	}
+	input.ExpenseDate = tc.Trip.EndDate.AddDate(0, 0, 8)
+	if _, err = svc.Create(context.Background(), actor, tc, input); !apperror.Is(err, "VALIDATION_FAILED") {
+		t.Fatalf("Create(after upper boundary) error = %v", err)
+	}
+	input.ExpenseDate = tc.Trip.EndDate.AddDate(0, 0, 7)
 	tc.Trip.Settings.MultiCurrencyEnabled = true
 	input.Currency = "USD"
 	if _, err = svc.Create(context.Background(), actor, tc, input); err != nil {
@@ -194,6 +199,31 @@ func TestCreateCoversMutableApprovalCurrencyAndDateBoundaries(t *testing.T) {
 	tc.Trip.IsFinalized = true
 	if _, err = svc.Create(context.Background(), actor, tc, input); !apperror.Is(err, "TRIP_FINALIZED") {
 		t.Fatalf("Create(finalized) error = %v", err)
+	}
+}
+
+func TestEveryMutationRejectsFinalizedTrip(t *testing.T) {
+	for _, operation := range []string{"update", "delete", "approve", "reject"} {
+		t.Run(operation, func(t *testing.T) {
+			svc, repo, _, actor, tc, _ := expenseFixture(true, domaintrip.EditEveryone, domainparticipant.RolePlanner)
+			repo.row = &domainexpense.Expense{ID: uuid.New(), TripID: tc.Trip.ID, ExpenseDate: tc.Trip.StartDate, Description: "Dinner", Amount: decimal.NewFromInt(10), Currency: "PHP", SplitType: domainexpense.SplitEqual, Status: domainexpense.StatusPending, CreatedByUserID: actor.UserID, Version: 1}
+			tc.Trip.IsFinalized = true
+			var err error
+			switch operation {
+			case "update":
+				description := "Changed"
+				_, err = svc.Update(context.Background(), actor, tc, repo.row.ID, UpdateInput{Description: &description, Version: 1})
+			case "delete":
+				err = svc.Delete(context.Background(), actor, tc, repo.row.ID)
+			case "approve":
+				_, err = svc.Approve(context.Background(), actor, tc, repo.row.ID)
+			case "reject":
+				_, err = svc.Reject(context.Background(), actor, tc, repo.row.ID, "duplicate")
+			}
+			if !apperror.Is(err, "TRIP_FINALIZED") {
+				t.Fatalf("%s(finalized) error = %v", operation, err)
+			}
+		})
 	}
 }
 

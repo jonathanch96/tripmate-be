@@ -2,9 +2,10 @@ package trip
 
 import (
 	"context"
+	"time"
+
 	"github.com/google/uuid"
 	domaintrip "github.com/jblabs/tripmate-be/services/tripmate/v1/entities/domain/trip"
-	"time"
 )
 
 type Dependencies struct {
