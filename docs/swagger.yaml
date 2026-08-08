@@ -53,6 +53,110 @@ definitions:
       user:
         $ref: '#/definitions/userresponse.User'
     type: object
+  balanceresponse.AppliedRate:
+    properties:
+      from:
+        type: string
+      is_final:
+        type: boolean
+      rate:
+        type: string
+      to:
+        type: string
+    type: object
+  balanceresponse.FinalPlan:
+    properties:
+      base_currency:
+        type: string
+      transfers:
+        items:
+          $ref: '#/definitions/balanceresponse.Transfer'
+        type: array
+    type: object
+  balanceresponse.ParticipantBalance:
+    properties:
+      net_balance:
+        type: string
+      total_owed:
+        type: string
+      total_paid:
+        type: string
+      user:
+        $ref: '#/definitions/balanceresponse.User'
+      user_id:
+        type: string
+    type: object
+  balanceresponse.Result:
+    properties:
+      balances:
+        items:
+          $ref: '#/definitions/balanceresponse.ParticipantBalance'
+        type: array
+      base_currency:
+        type: string
+      debts:
+        items:
+          $ref: '#/definitions/balanceresponse.Transfer'
+        type: array
+      rates_used:
+        items:
+          $ref: '#/definitions/balanceresponse.AppliedRate'
+        type: array
+      summary:
+        $ref: '#/definitions/balanceresponse.Summary'
+    type: object
+  balanceresponse.Summary:
+    properties:
+      expense_count:
+        type: integer
+      pending_expense_count:
+        type: integer
+      pending_settlement_count:
+        type: integer
+      settlement_count:
+        type: integer
+      total_expenses:
+        type: string
+      total_settled:
+        type: string
+      unsettled_total:
+        type: string
+    type: object
+  balanceresponse.Transfer:
+    properties:
+      amount:
+        type: string
+      bank_account_holder:
+        type: string
+      bank_account_number:
+        type: string
+      bank_name:
+        description: |-
+          Bank details are present only for viewers allowed to see them — the payer of this transfer
+          or the planner. They are nil for everyone else.
+        type: string
+      currency:
+        type: string
+      from_user_id:
+        type: string
+      to_user_id:
+        type: string
+    type: object
+  balanceresponse.User:
+    properties:
+      avatar_url:
+        type: string
+      created_at:
+        type: string
+      email:
+        type: string
+      id:
+        type: string
+      name:
+        type: string
+      updated_at:
+        type: string
+    type: object
   expenserequest.Create:
     properties:
       amount:
@@ -239,7 +343,7 @@ definitions:
       updated_at:
         type: string
     type: object
-  finance.rateRequest:
+  fxrequest.SetRate:
     properties:
       from:
         type: string
@@ -247,22 +351,28 @@ definitions:
         type: string
       to:
         type: string
+    required:
+    - from
+    - rate
+    - to
     type: object
-  finance.settlementRequest:
+  fxresponse.Rate:
     properties:
-      amount:
+      from:
         type: string
-      currency:
+      id:
         type: string
-      from_user_id:
+      is_final:
+        description: IsFinal marks a rate locked at finalization; locked rates survive
+          an unfinalize.
+        type: boolean
+      rate:
         type: string
-      method:
+      source:
         type: string
-      note:
+      to:
         type: string
-      proof_url:
-        type: string
-      to_user_id:
+      trip_id:
         type: string
     type: object
   invitationrequest.Create:
@@ -396,6 +506,103 @@ definitions:
       message:
         type: string
       rule:
+        type: string
+    type: object
+  settlementrequest.Create:
+    properties:
+      amount:
+        type: string
+      currency:
+        type: string
+      from_user_id:
+        type: string
+      method:
+        enum:
+        - cash
+        - bank_transfer
+        type: string
+      note:
+        type: string
+      proof_url:
+        type: string
+      to_user_id:
+        type: string
+    required:
+    - amount
+    - currency
+    - from_user_id
+    - method
+    - to_user_id
+    type: object
+  settlementrequest.Reject:
+    properties:
+      reason:
+        maxLength: 500
+        type: string
+    required:
+    - reason
+    type: object
+  settlementresponse.Settlement:
+    properties:
+      amount:
+        type: string
+      approved_at:
+        type: string
+      approved_by_user_id:
+        type: string
+      bank_account_holder:
+        type: string
+      bank_account_number:
+        type: string
+      bank_name:
+        description: |-
+          Bank details are the snapshot taken when the settlement was recorded, not a live read of the
+          payee's participant record. The account number is always masked on the way out.
+        type: string
+      created_at:
+        type: string
+      currency:
+        type: string
+      from_user:
+        $ref: '#/definitions/settlementresponse.User'
+      from_user_id:
+        type: string
+      id:
+        type: string
+      method:
+        type: string
+      note:
+        type: string
+      proof_url:
+        type: string
+      rejected_reason:
+        type: string
+      status:
+        type: string
+      to_user:
+        $ref: '#/definitions/settlementresponse.User'
+      to_user_id:
+        type: string
+      trip_id:
+        type: string
+      updated_at:
+        type: string
+      version:
+        type: integer
+    type: object
+  settlementresponse.User:
+    properties:
+      avatar_url:
+        type: string
+      created_at:
+        type: string
+      email:
+        type: string
+      id:
+        type: string
+      name:
+        type: string
+      updated_at:
         type: string
     type: object
   triprequest.Create:
@@ -661,9 +868,22 @@ paths:
       - auth
   /exchange-rates:
     get:
+      produces:
+      - application/json
       responses:
         "200":
           description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Envelope'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/fxresponse.Rate'
+                  type: array
+              type: object
+        "401":
+          description: Unauthorized
           schema:
             $ref: '#/definitions/response.Envelope'
       security:
@@ -827,6 +1047,23 @@ paths:
         "200":
           description: OK
           schema:
+            allOf:
+            - $ref: '#/definitions/response.Envelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/balanceresponse.Result'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "404":
+          description: Not Found
+          schema:
             $ref: '#/definitions/response.Envelope'
         "422":
           description: Unprocessable Entity
@@ -845,9 +1082,30 @@ paths:
         name: code
         required: true
         type: string
+      produces:
+      - application/json
       responses:
         "200":
           description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Envelope'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/fxresponse.Rate'
+                  type: array
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "404":
+          description: Not Found
           schema:
             $ref: '#/definitions/response.Envelope'
       security:
@@ -869,10 +1127,37 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/finance.rateRequest'
+          $ref: '#/definitions/fxrequest.SetRate'
+      produces:
+      - application/json
       responses:
         "200":
           description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Envelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/fxresponse.Rate'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "422":
+          description: Unprocessable Entity
           schema:
             $ref: '#/definitions/response.Envelope'
       security:
@@ -1172,6 +1457,27 @@ paths:
         "200":
           description: OK
           schema:
+            allOf:
+            - $ref: '#/definitions/response.Envelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/balanceresponse.FinalPlan'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "422":
+          description: Unprocessable Entity
+          schema:
             $ref: '#/definitions/response.Envelope'
       security:
       - BearerAuth: []
@@ -1186,9 +1492,32 @@ paths:
         name: code
         required: true
         type: string
+      produces:
+      - application/json
       responses:
         "200":
           description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Envelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/balanceresponse.FinalPlan'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "422":
+          description: Unprocessable Entity
           schema:
             $ref: '#/definitions/response.Envelope'
       security:
@@ -1370,11 +1699,46 @@ paths:
         name: code
         required: true
         type: string
+      - description: Page number
+        in: query
+        name: page
+        type: integer
+      - description: Rows per page
+        in: query
+        name: per_page
+        type: integer
+      - description: Filter by status
+        enum:
+        - pending
+        - approved
+        - rejected
+        in: query
+        name: status
+        type: string
       produces:
       - application/json
       responses:
         "200":
           description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Envelope'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/settlementresponse.Settlement'
+                  type: array
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "404":
+          description: Not Found
           schema:
             $ref: '#/definitions/response.Envelope'
       security:
@@ -1396,20 +1760,37 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/finance.settlementRequest'
+          $ref: '#/definitions/settlementrequest.Create'
       produces:
       - application/json
       responses:
         "201":
           description: Created
           schema:
-            $ref: '#/definitions/response.Envelope'
+            allOf:
+            - $ref: '#/definitions/response.Envelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/settlementresponse.Settlement'
+              type: object
         "400":
           description: Bad Request
           schema:
             $ref: '#/definitions/response.Envelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Envelope'
         "403":
           description: Forbidden
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "422":
+          description: Unprocessable Entity
           schema:
             $ref: '#/definitions/response.Envelope'
       security:
@@ -1430,9 +1811,27 @@ paths:
         name: id
         required: true
         type: string
+      produces:
+      - application/json
       responses:
         "200":
           description: OK
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "422":
+          description: Unprocessable Entity
           schema:
             $ref: '#/definitions/response.Envelope'
       security:
@@ -1453,9 +1852,32 @@ paths:
         name: id
         required: true
         type: string
+      produces:
+      - application/json
       responses:
         "200":
           description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Envelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/settlementresponse.Settlement'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "422":
+          description: Unprocessable Entity
           schema:
             $ref: '#/definitions/response.Envelope'
       security:
@@ -1478,9 +1900,42 @@ paths:
         name: id
         required: true
         type: string
+      - description: Rejection reason
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/settlementrequest.Reject'
+      produces:
+      - application/json
       responses:
         "200":
           description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Envelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/settlementresponse.Settlement'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "422":
+          description: Unprocessable Entity
           schema:
             $ref: '#/definitions/response.Envelope'
       security:
@@ -1496,9 +1951,27 @@ paths:
         name: code
         required: true
         type: string
+      produces:
+      - application/json
       responses:
         "200":
           description: OK
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "422":
+          description: Unprocessable Entity
           schema:
             $ref: '#/definitions/response.Envelope'
       security:

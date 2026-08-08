@@ -81,14 +81,30 @@ func (a *adapterGormPostgresql) ListByTripID(ctx context.Context, tripID uuid.UU
 	}
 	return rows, total, nil
 }
+
+// listAll reads every matching settlement without pagination. Balance calculation must see the
+// whole history of a trip, so it must never share the paginated ListByTripID read path.
+func (a *adapterGormPostgresql) listAll(ctx context.Context, tripID uuid.UUID, status *domainsettlement.Status) ([]domainsettlement.Settlement, error) {
+	q := a.withUsers(appdb.FromContext(ctx, a.db).WithContext(ctx).Model(&Settlement{})).Where("tripmate.settlements.trip_id=?", tripID)
+	if status != nil {
+		q = q.Where("tripmate.settlements.status=?", *status)
+	}
+	var ms []Settlement
+	if err := q.Select(selectUsers).Order("tripmate.settlements.created_at, tripmate.settlements.id").Find(&ms).Error; err != nil {
+		return nil, apperror.Wrap(err, "INTERNAL_ERROR")
+	}
+	rows := make([]domainsettlement.Settlement, len(ms))
+	for i := range ms {
+		rows[i] = toDomain(ms[i])
+	}
+	return rows, nil
+}
 func (a *adapterGormPostgresql) ListApprovedByTripID(ctx context.Context, tripID uuid.UUID) ([]domainsettlement.Settlement, error) {
 	status := domainsettlement.StatusApproved
-	rows, _, err := a.ListByTripID(ctx, tripID, settlementdomain.Filter{Status: &status, Page: 1, PerPage: 100})
-	return rows, err
+	return a.listAll(ctx, tripID, &status)
 }
 func (a *adapterGormPostgresql) ListForBalance(ctx context.Context, tripID uuid.UUID) ([]domainsettlement.Settlement, error) {
-	rows, _, err := a.ListByTripID(ctx, tripID, settlementdomain.Filter{Page: 1, PerPage: 100})
-	return rows, err
+	return a.listAll(ctx, tripID, nil)
 }
 func (a *adapterGormPostgresql) SoftDelete(ctx context.Context, id uuid.UUID) error {
 	r := appdb.FromContext(ctx, a.db).WithContext(ctx).Delete(&Settlement{}, "id=?", id)

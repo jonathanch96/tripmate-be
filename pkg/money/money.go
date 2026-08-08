@@ -18,6 +18,18 @@ var zeroScaleCurrencies = map[string]struct{}{
 	"IDR": {}, "JPY": {}, "KRW": {}, "VND": {},
 }
 
+var supportedCurrencies = map[string]struct{}{
+	"AUD": {}, "CAD": {}, "CHF": {}, "CNY": {}, "EUR": {}, "GBP": {}, "HKD": {}, "IDR": {}, "INR": {},
+	"JPY": {}, "KRW": {}, "MYR": {}, "NZD": {}, "PHP": {}, "SGD": {}, "THB": {}, "USD": {}, "VND": {},
+}
+
+// IsSupportedCurrency reports whether the code is one this app knows how to handle. Every domain
+// that accepts a currency from a caller checks this, so the list lives in one place.
+func IsSupportedCurrency(code string) bool {
+	_, ok := supportedCurrencies[strings.ToUpper(strings.TrimSpace(code))]
+	return ok
+}
+
 func DisplayScale(currency string) int32 {
 	if _, ok := zeroScaleCurrencies[strings.ToUpper(currency)]; ok {
 		return 0

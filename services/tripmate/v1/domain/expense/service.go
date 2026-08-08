@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jblabs/tripmate-be/pkg/apperror"
 	"github.com/jblabs/tripmate-be/pkg/identity"
+	"github.com/jblabs/tripmate-be/pkg/money"
 	"github.com/jblabs/tripmate-be/pkg/tripctx"
 	domainexpense "github.com/jblabs/tripmate-be/services/tripmate/v1/entities/domain/expense"
 	domainparticipant "github.com/jblabs/tripmate-be/services/tripmate/v1/entities/domain/participant"
@@ -33,7 +34,7 @@ func (s *service) Create(ctx context.Context, actor identity.Identity, tc tripct
 		return nil, err
 	}
 	input.Currency = strings.ToUpper(strings.TrimSpace(input.Currency))
-	if !supportedCurrency(input.Currency) || !tc.Trip.AllowsCurrency(input.Currency) {
+	if !money.IsSupportedCurrency(input.Currency) || !tc.Trip.AllowsCurrency(input.Currency) {
 		return nil, apperror.New("INVALID_CURRENCY")
 	}
 	if !input.Amount.IsPositive() {
@@ -119,7 +120,7 @@ func (s *service) Update(ctx context.Context, actor identity.Identity, tc tripct
 	if input.SplitType != nil {
 		entity.SplitType = *input.SplitType
 	}
-	if !supportedCurrency(entity.Currency) || !tc.Trip.AllowsCurrency(entity.Currency) {
+	if !money.IsSupportedCurrency(entity.Currency) || !tc.Trip.AllowsCurrency(entity.Currency) {
 		return nil, apperror.New("INVALID_CURRENCY")
 	}
 	rowsChanged := input.Amount != nil || input.Currency != nil || input.SplitType != nil || input.Payers != nil || input.Participants != nil || input.Manual != nil
@@ -303,12 +304,4 @@ func validateDate(tc tripctx.TripContext, value time.Time) error {
 func date(value time.Time) time.Time {
 	y, m, d := value.UTC().Date()
 	return time.Date(y, m, d, 0, 0, 0, 0, time.UTC)
-}
-
-func supportedCurrency(value string) bool {
-	switch value {
-	case "AUD", "CAD", "CHF", "CNY", "EUR", "GBP", "HKD", "IDR", "INR", "JPY", "KRW", "MYR", "NZD", "PHP", "SGD", "THB", "USD", "VND":
-		return true
-	}
-	return false
 }

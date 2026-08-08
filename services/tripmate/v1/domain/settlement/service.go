@@ -47,7 +47,7 @@ func (s *service) Record(ctx context.Context, actor identity.Identity, tc tripct
 		return nil, apperror.New("FORBIDDEN")
 	}
 	in.Currency = strings.ToUpper(strings.TrimSpace(in.Currency))
-	if !tc.Trip.AllowsCurrency(in.Currency) {
+	if !money.IsSupportedCurrency(in.Currency) || !tc.Trip.AllowsCurrency(in.Currency) {
 		return nil, apperror.New("INVALID_CURRENCY")
 	}
 	if in.Method != domainsettlement.MethodCash && in.Method != domainsettlement.MethodBankTransfer {

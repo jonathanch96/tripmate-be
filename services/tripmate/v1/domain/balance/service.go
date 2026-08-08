@@ -166,12 +166,24 @@ func (s *service) OutstandingDebt(ctx context.Context, tripID, fromID, toID uuid
 	if err != nil {
 		return decimal.Zero, err
 	}
-	for _, debt := range result.Debts {
-		if debt.FromUserID == fromID && debt.ToUserID == toID {
-			return debt.Amount, nil
+	// A bilateral cap, not a lookup in the optimizer's suggested transfer list. The optimizer emits
+	// *a* minimum-cardinality set of transfers that zeroes everyone out, so a legitimate payment
+	// between two people it happened not to pair would find no edge and be rejected outright.
+	// What actually bounds a payment from -> to is how much `from` is short overall and how much
+	// `to` is still owed overall; either side hitting zero means the payment is not settling a debt.
+	var owedByFrom, owedToTo decimal.Decimal
+	for _, row := range result.Balances {
+		switch row.UserID {
+		case fromID:
+			owedByFrom = row.NetBalance.Neg()
+		case toID:
+			owedToTo = row.NetBalance
 		}
 	}
-	return decimal.Zero, nil
+	if owedByFrom.IsNegative() || owedToTo.IsNegative() {
+		return decimal.Zero, nil
+	}
+	return decimal.Min(owedByFrom, owedToTo), nil
 }
 
 func (s *service) FinalSettlement(ctx context.Context, tc tripctx.TripContext) (*domainbalance.FinalPlan, error) {

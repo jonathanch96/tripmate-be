@@ -124,6 +124,15 @@ func TestRecordGuards(t *testing.T) {
 		{"over settlement", func(in *RecordInput, _ *tripctx.TripContext, _ *identity.Identity) {
 			in.Amount = decimal.NewFromInt(101)
 		}, "SETTLEMENT_EXCEEDS_DEBT"},
+		// S-9: a well-formed but non-ISO code must be rejected here rather than surviving until the
+		// rate lookup fails with the less precise EXCHANGE_RATE_MISSING.
+		{"unsupported currency code", func(in *RecordInput, tc *tripctx.TripContext, _ *identity.Identity) {
+			in.Currency = "XYZ"
+			tc.Trip.Settings.MultiCurrencyEnabled = true
+		}, "INVALID_CURRENCY"},
+		{"unknown method", func(in *RecordInput, _ *tripctx.TripContext, _ *identity.Identity) {
+			in.Method = domainsettlement.Method("crypto")
+		}, "VALIDATION_FAILED"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			svc, _, _, actor, tc, from, to := fixture(false)
@@ -136,6 +145,129 @@ func TestRecordGuards(t *testing.T) {
 		})
 	}
 }
+
+// S-3: with the approval setting off, a settlement must land already approved. Every other
+// approval-off case in this file errors out before status is ever assigned.
+func TestRecordLandsApprovedWhenApprovalNotRequired(t *testing.T) {
+	svc, _, events, actor, tc, from, to := fixture(false)
+	row, err := svc.Record(context.Background(), actor, tc, RecordInput{FromUserID: from, ToUserID: to, Amount: decimal.NewFromInt(50), Currency: "PHP", Method: domainsettlement.MethodCash})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if row.Status != domainsettlement.StatusApproved {
+		t.Fatalf("status = %s, want approved", row.Status)
+	}
+	if len(events.rows) != 1 || events.rows[0].EventType != "settlement.created" {
+		t.Fatalf("events = %+v", events.rows)
+	}
+}
+
+// S-5 cross-currency (test-plan item 7): the guard measures the settlement in the trip's base
+// currency, so a foreign amount must be converted before it is compared to the outstanding debt.
+func TestRecordConvertsBeforeCheckingOutstandingDebt(t *testing.T) {
+	for _, test := range []struct {
+		name    string
+		amount  int64
+		wantErr string
+	}{
+		// Outstanding debt is 100 PHP and the fixture rate is 50 PHP/USD.
+		{name: "foreign amount within the debt", amount: 2},
+		{name: "foreign amount over the debt", amount: 3, wantErr: "SETTLEMENT_EXCEEDS_DEBT"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			svc, _, _, actor, tc, from, to := fixture(false)
+			tc.Trip.Settings.MultiCurrencyEnabled = true
+			row, err := svc.Record(context.Background(), actor, tc, RecordInput{FromUserID: from, ToUserID: to, Amount: decimal.NewFromInt(test.amount), Currency: "USD", Method: domainsettlement.MethodCash})
+			if test.wantErr != "" {
+				if !apperror.Is(err, test.wantErr) {
+					t.Fatalf("error = %v, want %s", err, test.wantErr)
+				}
+				return
+			}
+			if err != nil || row.Currency != "USD" {
+				t.Fatalf("record = %+v err = %v", row, err)
+			}
+		})
+	}
+}
+
+// S-6: approve/reject act only on a pending settlement. Re-deciding one is implemented but was
+// never exercised.
+func TestApproveAndRejectOnlyActOnPendingSettlements(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		decide func(Service, identity.Identity, tripctx.TripContext, uuid.UUID) error
+	}{
+		{"re-approve an approved settlement", func(svc Service, actor identity.Identity, tc tripctx.TripContext, id uuid.UUID) error {
+			_, err := svc.Approve(context.Background(), actor, tc, id)
+			return err
+		}},
+		{"reject an approved settlement", func(svc Service, actor identity.Identity, tc tripctx.TripContext, id uuid.UUID) error {
+			_, err := svc.Reject(context.Background(), actor, tc, id, "changed my mind")
+			return err
+		}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			svc, _, _, actor, tc, from, to := fixture(true)
+			created, err := svc.Record(context.Background(), actor, tc, RecordInput{FromUserID: from, ToUserID: to, Amount: decimal.NewFromInt(50), Currency: "PHP", Method: domainsettlement.MethodCash})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err = svc.Approve(context.Background(), actor, tc, created.ID); err != nil {
+				t.Fatal(err)
+			}
+			if err = test.decide(svc, actor, tc, created.ID); !apperror.Is(err, "VALIDATION_FAILED") {
+				t.Fatalf("error = %v, want VALIDATION_FAILED", err)
+			}
+		})
+	}
+}
+
+func TestRejectRequiresAReason(t *testing.T) {
+	svc, _, _, actor, tc, from, to := fixture(true)
+	created, err := svc.Record(context.Background(), actor, tc, RecordInput{FromUserID: from, ToUserID: to, Amount: decimal.NewFromInt(50), Currency: "PHP", Method: domainsettlement.MethodCash})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = svc.Reject(context.Background(), actor, tc, created.ID, "   "); !apperror.Is(err, "VALIDATION_FAILED") {
+		t.Fatalf("error = %v, want VALIDATION_FAILED", err)
+	}
+}
+
+// S-10: delete is planner-only and never touches an approved settlement.
+func TestDeleteGuards(t *testing.T) {
+	for _, test := range []struct {
+		name, code string
+		approve    bool
+		asMember   bool
+	}{
+		{name: "member cannot delete", code: "PLANNER_ONLY", asMember: true},
+		{name: "approved settlements cannot be deleted", code: "VALIDATION_FAILED", approve: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			svc, repo, _, actor, tc, from, to := fixture(true)
+			created, err := svc.Record(context.Background(), actor, tc, RecordInput{FromUserID: from, ToUserID: to, Amount: decimal.NewFromInt(50), Currency: "PHP", Method: domainsettlement.MethodCash})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if test.approve {
+				if _, err = svc.Approve(context.Background(), actor, tc, created.ID); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if test.asMember {
+				tc.Participant.Role = domainparticipant.RoleParticipant
+			}
+			if err = svc.Delete(context.Background(), actor, tc, created.ID); !apperror.Is(err, test.code) {
+				t.Fatalf("error = %v, want %s", err, test.code)
+			}
+			if repo.row == nil {
+				t.Fatal("settlement was deleted despite the guard")
+			}
+		})
+	}
+}
+
 func TestApproveRejectDeleteStateRules(t *testing.T) {
 	svc, repo, _, actor, tc, from, to := fixture(true)
 	created, err := svc.Record(context.Background(), actor, tc, RecordInput{FromUserID: from, ToUserID: to, Amount: decimal.NewFromInt(50), Currency: "PHP", Method: domainsettlement.MethodCash})

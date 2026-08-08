@@ -226,6 +226,9 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
+                "produces": [
+                    "application/json"
+                ],
                 "tags": [
                     "finance"
                 ],
@@ -233,6 +236,27 @@ const docTemplate = `{
                 "responses": {
                     "200": {
                         "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/response.Envelope"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/definitions/fxresponse.Rate"
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
                         "schema": {
                             "$ref": "#/definitions/response.Envelope"
                         }
@@ -515,6 +539,36 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/response.Envelope"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/balanceresponse.Result"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/response.Envelope"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/response.Envelope"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
                             "$ref": "#/definitions/response.Envelope"
                         }
                     },
@@ -534,6 +588,9 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
+                "produces": [
+                    "application/json"
+                ],
                 "tags": [
                     "finance"
                 ],
@@ -551,6 +608,39 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/response.Envelope"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/definitions/fxresponse.Rate"
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/response.Envelope"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/response.Envelope"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
                             "$ref": "#/definitions/response.Envelope"
                         }
                     }
@@ -563,6 +653,9 @@ const docTemplate = `{
                     }
                 ],
                 "consumes": [
+                    "application/json"
+                ],
+                "produces": [
                     "application/json"
                 ],
                 "tags": [
@@ -583,13 +676,55 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/finance.rateRequest"
+                            "$ref": "#/definitions/fxrequest.SetRate"
                         }
                     }
                 ],
                 "responses": {
                     "200": {
                         "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/response.Envelope"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/fxresponse.Rate"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/response.Envelope"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/response.Envelope"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/response.Envelope"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/response.Envelope"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
                         "schema": {
                             "$ref": "#/definitions/response.Envelope"
                         }
@@ -1085,6 +1220,42 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/response.Envelope"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/balanceresponse.FinalPlan"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/response.Envelope"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/response.Envelope"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/response.Envelope"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
+                        "schema": {
                             "$ref": "#/definitions/response.Envelope"
                         }
                     }
@@ -1097,6 +1268,9 @@ const docTemplate = `{
                     {
                         "BearerAuth": []
                     }
+                ],
+                "produces": [
+                    "application/json"
                 ],
                 "tags": [
                     "finance"
@@ -1114,6 +1288,42 @@ const docTemplate = `{
                 "responses": {
                     "200": {
                         "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/response.Envelope"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/balanceresponse.FinalPlan"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/response.Envelope"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/response.Envelope"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/response.Envelope"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
                         "schema": {
                             "$ref": "#/definitions/response.Envelope"
                         }
@@ -1433,11 +1643,67 @@ const docTemplate = `{
                         "name": "code",
                         "in": "path",
                         "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Page number",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Rows per page",
+                        "name": "per_page",
+                        "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "pending",
+                            "approved",
+                            "rejected"
+                        ],
+                        "type": "string",
+                        "description": "Filter by status",
+                        "name": "status",
+                        "in": "query"
                     }
                 ],
                 "responses": {
                     "200": {
                         "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/response.Envelope"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/definitions/settlementresponse.Settlement"
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/response.Envelope"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/response.Envelope"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
                         "schema": {
                             "$ref": "#/definitions/response.Envelope"
                         }
@@ -1474,7 +1740,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/finance.settlementRequest"
+                            "$ref": "#/definitions/settlementrequest.Create"
                         }
                     }
                 ],
@@ -1482,7 +1748,19 @@ const docTemplate = `{
                     "201": {
                         "description": "Created",
                         "schema": {
-                            "$ref": "#/definitions/response.Envelope"
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/response.Envelope"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/settlementresponse.Settlement"
+                                        }
+                                    }
+                                }
+                            ]
                         }
                     },
                     "400": {
@@ -1491,8 +1769,26 @@ const docTemplate = `{
                             "$ref": "#/definitions/response.Envelope"
                         }
                     },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/response.Envelope"
+                        }
+                    },
                     "403": {
                         "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/response.Envelope"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/response.Envelope"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
                         "schema": {
                             "$ref": "#/definitions/response.Envelope"
                         }
@@ -1506,6 +1802,9 @@ const docTemplate = `{
                     {
                         "BearerAuth": []
                     }
+                ],
+                "produces": [
+                    "application/json"
                 ],
                 "tags": [
                     "settlements"
@@ -1533,6 +1832,30 @@ const docTemplate = `{
                         "schema": {
                             "$ref": "#/definitions/response.Envelope"
                         }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/response.Envelope"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/response.Envelope"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/response.Envelope"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
+                        "schema": {
+                            "$ref": "#/definitions/response.Envelope"
+                        }
                     }
                 }
             }
@@ -1543,6 +1866,9 @@ const docTemplate = `{
                     {
                         "BearerAuth": []
                     }
+                ],
+                "produces": [
+                    "application/json"
                 ],
                 "tags": [
                     "settlements"
@@ -1568,6 +1894,42 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/response.Envelope"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/settlementresponse.Settlement"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/response.Envelope"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/response.Envelope"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/response.Envelope"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
+                        "schema": {
                             "$ref": "#/definitions/response.Envelope"
                         }
                     }
@@ -1582,6 +1944,9 @@ const docTemplate = `{
                     }
                 ],
                 "consumes": [
+                    "application/json"
+                ],
+                "produces": [
                     "application/json"
                 ],
                 "tags": [
@@ -1602,11 +1967,62 @@ const docTemplate = `{
                         "name": "id",
                         "in": "path",
                         "required": true
+                    },
+                    {
+                        "description": "Rejection reason",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/settlementrequest.Reject"
+                        }
                     }
                 ],
                 "responses": {
                     "200": {
                         "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/response.Envelope"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/settlementresponse.Settlement"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/response.Envelope"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/response.Envelope"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/response.Envelope"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/response.Envelope"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
                         "schema": {
                             "$ref": "#/definitions/response.Envelope"
                         }
@@ -1620,6 +2036,9 @@ const docTemplate = `{
                     {
                         "BearerAuth": []
                     }
+                ],
+                "produces": [
+                    "application/json"
                 ],
                 "tags": [
                     "finance"
@@ -1637,6 +2056,30 @@ const docTemplate = `{
                 "responses": {
                     "200": {
                         "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.Envelope"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/response.Envelope"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/response.Envelope"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/response.Envelope"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
                         "schema": {
                             "$ref": "#/definitions/response.Envelope"
                         }
@@ -1879,6 +2322,162 @@ const docTemplate = `{
                 },
                 "user": {
                     "$ref": "#/definitions/userresponse.User"
+                }
+            }
+        },
+        "balanceresponse.AppliedRate": {
+            "type": "object",
+            "properties": {
+                "from": {
+                    "type": "string"
+                },
+                "is_final": {
+                    "type": "boolean"
+                },
+                "rate": {
+                    "type": "string"
+                },
+                "to": {
+                    "type": "string"
+                }
+            }
+        },
+        "balanceresponse.FinalPlan": {
+            "type": "object",
+            "properties": {
+                "base_currency": {
+                    "type": "string"
+                },
+                "transfers": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/balanceresponse.Transfer"
+                    }
+                }
+            }
+        },
+        "balanceresponse.ParticipantBalance": {
+            "type": "object",
+            "properties": {
+                "net_balance": {
+                    "type": "string"
+                },
+                "total_owed": {
+                    "type": "string"
+                },
+                "total_paid": {
+                    "type": "string"
+                },
+                "user": {
+                    "$ref": "#/definitions/balanceresponse.User"
+                },
+                "user_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "balanceresponse.Result": {
+            "type": "object",
+            "properties": {
+                "balances": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/balanceresponse.ParticipantBalance"
+                    }
+                },
+                "base_currency": {
+                    "type": "string"
+                },
+                "debts": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/balanceresponse.Transfer"
+                    }
+                },
+                "rates_used": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/balanceresponse.AppliedRate"
+                    }
+                },
+                "summary": {
+                    "$ref": "#/definitions/balanceresponse.Summary"
+                }
+            }
+        },
+        "balanceresponse.Summary": {
+            "type": "object",
+            "properties": {
+                "expense_count": {
+                    "type": "integer"
+                },
+                "pending_expense_count": {
+                    "type": "integer"
+                },
+                "pending_settlement_count": {
+                    "type": "integer"
+                },
+                "settlement_count": {
+                    "type": "integer"
+                },
+                "total_expenses": {
+                    "type": "string"
+                },
+                "total_settled": {
+                    "type": "string"
+                },
+                "unsettled_total": {
+                    "type": "string"
+                }
+            }
+        },
+        "balanceresponse.Transfer": {
+            "type": "object",
+            "properties": {
+                "amount": {
+                    "type": "string"
+                },
+                "bank_account_holder": {
+                    "type": "string"
+                },
+                "bank_account_number": {
+                    "type": "string"
+                },
+                "bank_name": {
+                    "description": "Bank details are present only for viewers allowed to see them — the payer of this transfer\nor the planner. They are nil for everyone else.",
+                    "type": "string"
+                },
+                "currency": {
+                    "type": "string"
+                },
+                "from_user_id": {
+                    "type": "string"
+                },
+                "to_user_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "balanceresponse.User": {
+            "type": "object",
+            "properties": {
+                "avatar_url": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "email": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
                 }
             }
         },
@@ -2159,8 +2758,13 @@ const docTemplate = `{
                 }
             }
         },
-        "finance.rateRequest": {
+        "fxrequest.SetRate": {
             "type": "object",
+            "required": [
+                "from",
+                "rate",
+                "to"
+            ],
             "properties": {
                 "from": {
                     "type": "string"
@@ -2173,28 +2777,29 @@ const docTemplate = `{
                 }
             }
         },
-        "finance.settlementRequest": {
+        "fxresponse.Rate": {
             "type": "object",
             "properties": {
-                "amount": {
+                "from": {
                     "type": "string"
                 },
-                "currency": {
+                "id": {
                     "type": "string"
                 },
-                "from_user_id": {
+                "is_final": {
+                    "description": "IsFinal marks a rate locked at finalization; locked rates survive an unfinalize.",
+                    "type": "boolean"
+                },
+                "rate": {
                     "type": "string"
                 },
-                "method": {
+                "source": {
                     "type": "string"
                 },
-                "note": {
+                "to": {
                     "type": "string"
                 },
-                "proof_url": {
-                    "type": "string"
-                },
-                "to_user_id": {
+                "trip_id": {
                     "type": "string"
                 }
             }
@@ -2395,6 +3000,147 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "rule": {
+                    "type": "string"
+                }
+            }
+        },
+        "settlementrequest.Create": {
+            "type": "object",
+            "required": [
+                "amount",
+                "currency",
+                "from_user_id",
+                "method",
+                "to_user_id"
+            ],
+            "properties": {
+                "amount": {
+                    "type": "string"
+                },
+                "currency": {
+                    "type": "string"
+                },
+                "from_user_id": {
+                    "type": "string"
+                },
+                "method": {
+                    "type": "string",
+                    "enum": [
+                        "cash",
+                        "bank_transfer"
+                    ]
+                },
+                "note": {
+                    "type": "string"
+                },
+                "proof_url": {
+                    "type": "string"
+                },
+                "to_user_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "settlementrequest.Reject": {
+            "type": "object",
+            "required": [
+                "reason"
+            ],
+            "properties": {
+                "reason": {
+                    "type": "string",
+                    "maxLength": 500
+                }
+            }
+        },
+        "settlementresponse.Settlement": {
+            "type": "object",
+            "properties": {
+                "amount": {
+                    "type": "string"
+                },
+                "approved_at": {
+                    "type": "string"
+                },
+                "approved_by_user_id": {
+                    "type": "string"
+                },
+                "bank_account_holder": {
+                    "type": "string"
+                },
+                "bank_account_number": {
+                    "type": "string"
+                },
+                "bank_name": {
+                    "description": "Bank details are the snapshot taken when the settlement was recorded, not a live read of the\npayee's participant record. The account number is always masked on the way out.",
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "currency": {
+                    "type": "string"
+                },
+                "from_user": {
+                    "$ref": "#/definitions/settlementresponse.User"
+                },
+                "from_user_id": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "method": {
+                    "type": "string"
+                },
+                "note": {
+                    "type": "string"
+                },
+                "proof_url": {
+                    "type": "string"
+                },
+                "rejected_reason": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "to_user": {
+                    "$ref": "#/definitions/settlementresponse.User"
+                },
+                "to_user_id": {
+                    "type": "string"
+                },
+                "trip_id": {
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                },
+                "version": {
+                    "type": "integer"
+                }
+            }
+        },
+        "settlementresponse.User": {
+            "type": "object",
+            "properties": {
+                "avatar_url": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "email": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "updated_at": {
                     "type": "string"
                 }
             }
