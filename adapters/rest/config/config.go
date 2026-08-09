@@ -16,6 +16,8 @@ type Config struct {
 	DB       DBConfig
 	JWT      JWTConfig
 	CORS     CORSConfig
+	Storage  StorageConfig
+	OCR      OCRConfig
 	Observab ObservabilityConfig
 }
 
@@ -48,6 +50,23 @@ type JWTConfig struct {
 
 type CORSConfig struct {
 	AllowedOrigins []string `envconfig:"CORS_ALLOWED_ORIGINS" default:"http://localhost:3000"`
+}
+
+type StorageConfig struct {
+	Endpoint  string `envconfig:"STORAGE_ENDPOINT"`
+	AccessKey string `envconfig:"STORAGE_ACCESS_KEY"`
+	SecretKey string `envconfig:"STORAGE_SECRET_KEY"`
+	Bucket    string `envconfig:"STORAGE_BUCKET" default:"tripmate-receipts"`
+	Region    string `envconfig:"STORAGE_REGION" default:"us-east-1"`
+	UseSSL    bool   `envconfig:"STORAGE_USE_SSL" default:"false"`
+	LocalRoot string `envconfig:"STORAGE_LOCAL_ROOT" default:"./var/receipts"`
+	PublicURL string `envconfig:"STORAGE_PUBLIC_URL" default:"http://localhost:8080/api/v1/receipt-images"`
+}
+
+type OCRConfig struct {
+	GeminiAPIKey string        `envconfig:"GEMINI_API_KEY"`
+	GeminiModel  string        `envconfig:"GEMINI_MODEL" default:"gemini-1.5-flash"`
+	Timeout      time.Duration `envconfig:"OCR_TIMEOUT" default:"30s"`
 }
 
 type ObservabilityConfig struct{}
@@ -89,6 +108,12 @@ func (c *Config) Validate() error {
 	}
 	if len(c.JWT.AccessSecret) < 32 || len(c.JWT.RefreshSecret) < 32 {
 		return fmt.Errorf("JWT secrets must be at least 32 bytes")
+	}
+	if c.Storage.Endpoint != "" && (c.Storage.AccessKey == "" || c.Storage.SecretKey == "") {
+		return fmt.Errorf("STORAGE_ACCESS_KEY and STORAGE_SECRET_KEY are required with STORAGE_ENDPOINT")
+	}
+	if c.OCR.Timeout < 0 {
+		return fmt.Errorf("OCR_TIMEOUT must be positive")
 	}
 	if c.IsProduction() {
 		if c.DB.SSLMode == "disable" {

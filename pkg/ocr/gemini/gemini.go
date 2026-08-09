@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"io"
 	"math/rand"
+	"net"
 	"net/http"
 	"time"
 
@@ -123,6 +124,23 @@ type inlineData struct {
 type genConfig struct {
 	ResponseMimeType string  `json:"response_mime_type"`
 	Temperature      float64 `json:"temperature"`
+	ResponseSchema   any     `json:"response_schema"`
+}
+
+var receiptSchema = map[string]any{
+	"type": "OBJECT",
+	"properties": map[string]any{
+		"merchant": map[string]any{"type": "STRING"},
+		"date":     map[string]any{"type": "STRING", "nullable": true},
+		"currency": map[string]any{"type": "STRING", "nullable": true},
+		"lineItems": map[string]any{"type": "ARRAY", "items": map[string]any{"type": "OBJECT", "properties": map[string]any{
+			"name": map[string]any{"type": "STRING"}, "quantity": map[string]any{"type": "STRING"},
+			"unitPrice": map[string]any{"type": "STRING"}, "totalPrice": map[string]any{"type": "STRING"},
+		}, "required": []string{"name", "quantity", "unitPrice", "totalPrice"}}},
+		"subtotal": map[string]any{"type": "STRING"}, "tax": map[string]any{"type": "STRING"},
+		"serviceCharge": map[string]any{"type": "STRING"}, "total": map[string]any{"type": "STRING"},
+	},
+	"required": []string{"merchant", "lineItems", "subtotal", "tax", "serviceCharge", "total"},
 }
 
 type response struct {
@@ -141,7 +159,7 @@ func (p *Provider) Extract(ctx context.Context, img receiptdomain.Image) (*recei
 			{InlineData: &inlineData{MimeType: img.ContentType, Data: base64.StdEncoding.EncodeToString(img.Data)}},
 			{Text: prompt},
 		}}},
-		Config: genConfig{ResponseMimeType: "application/json", Temperature: 0},
+		Config: genConfig{ResponseMimeType: "application/json", Temperature: 0, ResponseSchema: receiptSchema},
 	})
 	if err != nil {
 		return nil, apperror.Wrap(err, "INTERNAL_ERROR")
@@ -169,12 +187,12 @@ func (p *Provider) Extract(ctx context.Context, img receiptdomain.Image) (*recei
 
 	text, err := firstText(raw)
 	if err != nil {
-		return nil, err
+		return &receiptdomain.ExtractionResult{Raw: append([]byte(nil), raw...)}, err
 	}
 	result, err := ocr.Parse([]byte(text))
 	if err != nil {
 		// OCR-2: keep whatever the model said, so a failed receipt can be debugged later.
-		return nil, err
+		return &receiptdomain.ExtractionResult{Raw: json.RawMessage(text)}, err
 	}
 	return result, nil
 }
@@ -193,6 +211,10 @@ func (p *Provider) call(ctx context.Context, body []byte) ([]byte, error) {
 	resp, err := p.client.Do(request)
 	if err != nil {
 		// The error from the transport can contain the URL but never the header, so it is safe.
+		var networkError net.Error
+		if errors.As(err, &networkError) && networkError.Timeout() {
+			return nil, &transient{apperror.Newf("OCR_PROVIDER_ERROR", "the receipt provider timed out")}
+		}
 		return nil, apperror.Newf("OCR_PROVIDER_ERROR", "the receipt provider could not be reached")
 	}
 	defer resp.Body.Close()

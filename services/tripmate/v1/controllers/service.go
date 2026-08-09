@@ -15,6 +15,7 @@ import (
 	financecontroller "github.com/jblabs/tripmate-be/services/tripmate/v1/controllers/finance"
 	invitationcontroller "github.com/jblabs/tripmate-be/services/tripmate/v1/controllers/invitation"
 	participantcontroller "github.com/jblabs/tripmate-be/services/tripmate/v1/controllers/participant"
+	receiptcontroller "github.com/jblabs/tripmate-be/services/tripmate/v1/controllers/receipt"
 	tripcontroller "github.com/jblabs/tripmate-be/services/tripmate/v1/controllers/trip"
 	usercontroller "github.com/jblabs/tripmate-be/services/tripmate/v1/controllers/user"
 	appdb "github.com/jblabs/tripmate-be/services/tripmate/v1/db"
@@ -23,6 +24,7 @@ import (
 	splitsdb "github.com/jblabs/tripmate-be/services/tripmate/v1/db/tripmate/expense_splits"
 	expensesdb "github.com/jblabs/tripmate-be/services/tripmate/v1/db/tripmate/expenses"
 	outboxdb "github.com/jblabs/tripmate-be/services/tripmate/v1/db/tripmate/outbox_events"
+	receiptsdb "github.com/jblabs/tripmate-be/services/tripmate/v1/db/tripmate/receipts"
 	refreshtokens "github.com/jblabs/tripmate-be/services/tripmate/v1/db/tripmate/refresh_tokens"
 	settlementsdb "github.com/jblabs/tripmate-be/services/tripmate/v1/db/tripmate/settlements"
 	invitesdb "github.com/jblabs/tripmate-be/services/tripmate/v1/db/tripmate/trip_invitations"
@@ -35,6 +37,7 @@ import (
 	fxdomain "github.com/jblabs/tripmate-be/services/tripmate/v1/domain/fx"
 	invitationdomain "github.com/jblabs/tripmate-be/services/tripmate/v1/domain/invitation"
 	participantdomain "github.com/jblabs/tripmate-be/services/tripmate/v1/domain/participant"
+	receiptdomain "github.com/jblabs/tripmate-be/services/tripmate/v1/domain/receipt"
 	settlementdomain "github.com/jblabs/tripmate-be/services/tripmate/v1/domain/settlement"
 	tripdomain "github.com/jblabs/tripmate-be/services/tripmate/v1/domain/trip"
 	userdomain "github.com/jblabs/tripmate-be/services/tripmate/v1/domain/user"
@@ -44,9 +47,11 @@ import (
 )
 
 type Dependencies struct {
-	DB  *gorm.DB
-	Cfg *config.Config
-	Log *slog.Logger
+	DB      *gorm.DB
+	Cfg     *config.Config
+	Log     *slog.Logger
+	Storage receiptdomain.ObjectStorage
+	OCR     receiptdomain.OCRProvider
 }
 
 type Service struct {
@@ -57,6 +62,7 @@ type Service struct {
 	invites  invitationcontroller.Controller
 	expenses expensecontroller.Controller
 	finance  financecontroller.Controller
+	receipts receiptcontroller.Controller
 	issuer   *appjwt.Issuer
 }
 
@@ -74,12 +80,15 @@ func NewService(deps Dependencies) *Service {
 	tripRepo := tripsdb.New(deps.DB)
 	partRepo := partsdb.New(deps.DB)
 	expenseRepo := expensesdb.New(deps.DB)
+	receiptRepo := receiptsdb.New(deps.DB)
 	tripService := tripdomain.NewService(tripdomain.Dependencies{Repo: tripRepo, Participants: partRepo, Tx: tripTransactor{deps.DB}, Expenses: expenseRepo})
 	partService := participantdomain.NewService(partRepo, tripRepo, expenseRepo)
 	expenseService := expensedomain.NewService(expensedomain.Dependencies{
 		Expenses: expenseRepo, Payers: payersdb.New(deps.DB), Splits: splitsdb.New(deps.DB),
-		Participants: partRepo, Outbox: outboxdb.New(deps.DB), UOW: appdb.NewGormUnitOfWork(deps.DB),
+		Participants: partRepo, Outbox: outboxdb.New(deps.DB), UOW: appdb.NewGormUnitOfWork(deps.DB), Receipts: receiptRepo,
 	})
+	receiptService := receiptdomain.NewService(receiptdomain.Dependencies{Repo: receiptRepo, Participants: partRepo,
+		Storage: deps.Storage, OCR: deps.OCR, Expenses: expenseService, UOW: appdb.NewGormUnitOfWork(deps.DB)})
 	rateService := fxdomain.NewService(fxdomain.Dependencies{Repo: ratesdb.New(deps.DB)})
 	settlementRepo := settlementsdb.New(deps.DB)
 	balanceService := balancedomain.NewService(balancedomain.Dependencies{Expenses: expenseRepo, Settlements: settlementRepo, Participants: partRepo, FX: rateService, Trips: tripRepo})
@@ -93,6 +102,7 @@ func NewService(deps Dependencies) *Service {
 		invites: invitationcontroller.NewController(tripService, partService, inviteService), issuer: issuer,
 		expenses: expensecontroller.NewController(tripService, partService, expenseService),
 		finance:  financecontroller.NewController(tripService, partService, balanceService, settlementService, rateService, finalService),
+		receipts: receiptcontroller.NewController(tripService, partService, receiptService),
 	}
 }
 
@@ -107,6 +117,7 @@ func (s *Service) RegisterRoutes(group *gin.RouterGroup) {
 	s.invites.RegisterRoutes(protected)
 	s.expenses.RegisterRoutes(protected)
 	s.finance.RegisterRoutes(protected)
+	s.receipts.RegisterRoutes(protected)
 }
 
 type tripTransactor struct{ db *gorm.DB }

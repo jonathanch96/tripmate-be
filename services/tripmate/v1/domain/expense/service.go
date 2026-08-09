@@ -184,6 +184,11 @@ func (s *service) Delete(ctx context.Context, actor identity.Identity, tc tripct
 		return apperror.New("EDIT_OWN_ONLY")
 	}
 	return s.deps.UOW.Do(ctx, func(txctx context.Context) error {
+		if s.deps.Receipts != nil {
+			if unlinkErr := s.deps.Receipts.ClearExpenseLink(txctx, id); unlinkErr != nil {
+				return unlinkErr
+			}
+		}
 		if deleteErr := s.deps.Expenses.SoftDelete(txctx, id); deleteErr != nil {
 			return deleteErr
 		}

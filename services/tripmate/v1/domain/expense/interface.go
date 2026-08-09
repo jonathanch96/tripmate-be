@@ -44,12 +44,17 @@ type OutboxRepository interface {
 	Create(context.Context, *event.OutboxEvent) error
 }
 
+type ReceiptLinker interface {
+	ClearExpenseLink(context.Context, uuid.UUID) error
+}
+
 type Dependencies struct {
 	Expenses     Repository
 	Payers       PayerRepository
 	Splits       SplitRepository
 	Participants ParticipantRepository
 	Outbox       OutboxRepository
+	Receipts     ReceiptLinker
 	UOW          shared.UnitOfWork
 	Clock        func() time.Time
 }

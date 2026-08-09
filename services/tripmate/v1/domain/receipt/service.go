@@ -104,6 +104,9 @@ func (s *service) Extract(ctx context.Context, actor identity.Identity, tc tripc
 		// OCR-2: the receipt lands in `failed`, keeping enough to retry or to enter by hand.
 		reason := failureReason(extractErr)
 		entity.Status, entity.FailureReason = domainreceipt.StatusFailed, &reason
+		if result != nil && len(result.Raw) > 0 {
+			entity.RawResponse = append([]byte(nil), result.Raw...)
+		}
 		if _, err = s.deps.Repo.Update(ctx, entity); err != nil {
 			return nil, err
 		}

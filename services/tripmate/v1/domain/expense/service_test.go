@@ -86,6 +86,13 @@ type directUOW struct{}
 
 func (directUOW) Do(ctx context.Context, fn func(context.Context) error) error { return fn(ctx) }
 
+type receiptLinkSpy struct{ expenseIDs []uuid.UUID }
+
+func (s *receiptLinkSpy) ClearExpenseLink(_ context.Context, expenseID uuid.UUID) error {
+	s.expenseIDs = append(s.expenseIDs, expenseID)
+	return nil
+}
+
 func expenseFixture(approval bool, permission domaintrip.EditPermission, role domainparticipant.Role) (*service, *memoryExpenses, *memoryOutbox, identity.Identity, tripctx.TripContext, uuid.UUID) {
 	actor, other, tripID := uuid.New(), uuid.New(), uuid.New()
 	tc := tripctx.TripContext{Trip: domaintrip.Trip{ID: tripID, Code: "ABC123", BaseCurrency: "PHP", StartDate: time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC), EndDate: time.Date(2026, 8, 10, 0, 0, 0, 0, time.UTC), Settings: domaintrip.Settings{EditPermission: permission, ApprovalRequiredExpenses: approval}}, Participant: domainparticipant.Participant{TripID: tripID, UserID: actor, Role: role}}
@@ -147,6 +154,20 @@ func TestEditPermissionMatrix(t *testing.T) {
 				})
 			}
 		}
+	}
+}
+
+func TestDeletingReceiptExpenseReopensItsReceipt(t *testing.T) {
+	svc, repo, _, actor, tc, _ := expenseFixture(false, domaintrip.EditOwnOnly, domainparticipant.RoleParticipant)
+	row := &domainexpense.Expense{ID: uuid.New(), TripID: tc.Trip.ID, ExpenseDate: tc.Trip.StartDate, Description: "Receipt dinner", Amount: decimal.NewFromInt(10), Currency: "PHP", SplitType: domainexpense.SplitItem, Status: domainexpense.StatusApproved, Source: domainexpense.SourceReceipt, CreatedByUserID: actor.UserID}
+	repo.row = row
+	links := &receiptLinkSpy{}
+	svc.deps.Receipts = links
+	if err := svc.Delete(context.Background(), actor, tc, row.ID); err != nil {
+		t.Fatal(err)
+	}
+	if len(links.expenseIDs) != 1 || links.expenseIDs[0] != row.ID {
+		t.Fatalf("receipt link was not reopened: %v", links.expenseIDs)
 	}
 }
 

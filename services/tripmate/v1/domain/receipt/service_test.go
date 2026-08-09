@@ -409,6 +409,20 @@ func TestReExtractionIsRefusedWhileItemsAreAssigned(t *testing.T) {
 	}
 }
 
+func TestMalformedExtractionPersistsRawResponse(t *testing.T) {
+	f := newFixture(t)
+	f.repo.receipt.Status = domainreceipt.StatusUploaded
+	f.ocr.result = &ExtractionResult{Raw: []byte("not-json-from-provider")}
+	f.ocr.err = apperror.New("OCR_UNPARSEABLE")
+	_, err := f.service.Extract(context.Background(), f.actor, f.tc, f.repo.receipt.ID)
+	if !apperror.Is(err, "OCR_UNPARSEABLE") {
+		t.Fatalf("error = %v, want OCR_UNPARSEABLE", err)
+	}
+	if f.repo.receipt.Status != domainreceipt.StatusFailed || string(f.repo.receipt.RawResponse) != "not-json-from-provider" {
+		t.Fatalf("failed receipt lost provider evidence: status=%s raw=%q", f.repo.receipt.Status, f.repo.receipt.RawResponse)
+	}
+}
+
 // A-1: someone who is not on the trip cannot be put on the hook for a line.
 func TestAssignmentsRejectAStranger(t *testing.T) {
 	f := newFixture(t)

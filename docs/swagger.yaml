@@ -479,6 +479,150 @@ definitions:
       name:
         type: string
     type: object
+  receipt.assignmentRequest:
+    properties:
+      item_id:
+        type: string
+      user_ids:
+        items:
+          type: string
+        type: array
+    type: object
+  receipt.convertRequest:
+    properties:
+      description:
+        type: string
+      expense_date:
+        type: string
+      payers:
+        items:
+          properties:
+            amount:
+              type: string
+            user_id:
+              type: string
+          type: object
+        type: array
+    type: object
+  receipt.itemRequest:
+    properties:
+      name:
+        type: string
+      quantity:
+        type: string
+      total_price:
+        type: string
+      unit_price:
+        type: string
+    type: object
+  receipt.itemResponse:
+    properties:
+      assignee_ids:
+        items:
+          type: string
+        type: array
+      id:
+        type: string
+      name:
+        type: string
+      quantity:
+        type: string
+      receipt_id:
+        type: string
+      sort_order:
+        type: integer
+      total_price:
+        type: string
+      unit_price:
+        type: string
+    type: object
+  receipt.receiptResponse:
+    properties:
+      content_type:
+        type: string
+      created_at:
+        type: string
+      currency:
+        type: string
+      discrepancy:
+        type: boolean
+      expense_id:
+        type: string
+      failure_reason:
+        type: string
+      id:
+        type: string
+      image_url:
+        type: string
+      items:
+        items:
+          $ref: '#/definitions/receipt.itemResponse'
+        type: array
+      merchant:
+        type: string
+      provider:
+        type: string
+      provider_model:
+        type: string
+      receipt_date:
+        type: string
+      service_charge:
+        type: string
+      size_bytes:
+        type: integer
+      status:
+        type: string
+      subtotal:
+        type: string
+      tax:
+        type: string
+      total:
+        type: string
+      trip_id:
+        type: string
+      updated_at:
+        type: string
+      uploaded_by:
+        type: string
+      uploader:
+        $ref: '#/definitions/userresponse.User'
+    type: object
+  receipt.shareResponse:
+    properties:
+      currency:
+        type: string
+      discrepancy:
+        type: boolean
+      items_total:
+        type: string
+      per_user:
+        items:
+          $ref: '#/definitions/receipt.userShareResponse'
+        type: array
+      service_charge:
+        type: string
+      tax:
+        type: string
+      total:
+        type: string
+      unassigned_items:
+        items:
+          type: string
+        type: array
+    type: object
+  receipt.userShareResponse:
+    properties:
+      items_subtotal:
+        type: string
+      service_charge:
+        type: string
+      tax:
+        type: string
+      total:
+        type: string
+      user_id:
+        type: string
+    type: object
   response.Envelope:
     properties:
       code:
@@ -1691,6 +1835,331 @@ paths:
       summary: Update participant details
       tags:
       - participants
+  /trips/{code}/receipts:
+    get:
+      parameters:
+      - description: Trip code
+        in: path
+        name: code
+        required: true
+        type: string
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Envelope'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/receipt.receiptResponse'
+                  type: array
+              type: object
+      security:
+      - BearerAuth: []
+      summary: List trip receipts
+      tags:
+      - receipts
+    post:
+      consumes:
+      - multipart/form-data
+      parameters:
+      - description: Trip code
+        in: path
+        name: code
+        required: true
+        type: string
+      - description: JPEG, PNG, or WebP receipt (max 10 MB)
+        in: formData
+        name: file
+        required: true
+        type: file
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Envelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/receipt.receiptResponse'
+              type: object
+      security:
+      - BearerAuth: []
+      summary: Upload a receipt image
+      tags:
+      - receipts
+  /trips/{code}/receipts/{id}:
+    delete:
+      parameters:
+      - description: Trip code
+        in: path
+        name: code
+        required: true
+        type: string
+      - description: Receipt ID
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      security:
+      - BearerAuth: []
+      summary: Delete a receipt without deleting its expense
+      tags:
+      - receipts
+    get:
+      parameters:
+      - description: Trip code
+        in: path
+        name: code
+        required: true
+        type: string
+      - description: Receipt ID
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Envelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/receipt.receiptResponse'
+              type: object
+      security:
+      - BearerAuth: []
+      summary: Get a receipt with items, assignments, and a short-lived image URL
+      tags:
+      - receipts
+  /trips/{code}/receipts/{id}/assignments:
+    put:
+      parameters:
+      - description: Trip code
+        in: path
+        name: code
+        required: true
+        type: string
+      - description: Receipt ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Assignments
+        in: body
+        name: body
+        required: true
+        schema:
+          items:
+            $ref: '#/definitions/receipt.assignmentRequest'
+          type: array
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      security:
+      - BearerAuth: []
+      summary: Replace all receipt item assignments
+      tags:
+      - receipts
+  /trips/{code}/receipts/{id}/convert:
+    post:
+      parameters:
+      - description: Trip code
+        in: path
+        name: code
+        required: true
+        type: string
+      - description: Receipt ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Expense details and payers
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/receipt.convertRequest'
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Envelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/expenseresponse.Expense'
+              type: object
+      security:
+      - BearerAuth: []
+      summary: Convert a receipt into one item-split expense
+      tags:
+      - receipts
+  /trips/{code}/receipts/{id}/extract:
+    post:
+      parameters:
+      - description: Trip code
+        in: path
+        name: code
+        required: true
+        type: string
+      - description: Receipt ID
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Envelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/receipt.receiptResponse'
+              type: object
+      security:
+      - BearerAuth: []
+      summary: Extract and persist receipt line items
+      tags:
+      - receipts
+  /trips/{code}/receipts/{id}/items:
+    post:
+      parameters:
+      - description: Trip code
+        in: path
+        name: code
+        required: true
+        type: string
+      - description: Receipt ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Line item
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/receipt.itemRequest'
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Envelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/receipt.itemResponse'
+              type: object
+      security:
+      - BearerAuth: []
+      summary: Add a receipt line item
+      tags:
+      - receipts
+  /trips/{code}/receipts/{id}/items/{itemId}:
+    delete:
+      parameters:
+      - description: Trip code
+        in: path
+        name: code
+        required: true
+        type: string
+      - description: Receipt ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Item ID
+        in: path
+        name: itemId
+        required: true
+        type: string
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      security:
+      - BearerAuth: []
+      summary: Delete a receipt line item
+      tags:
+      - receipts
+    patch:
+      parameters:
+      - description: Trip code
+        in: path
+        name: code
+        required: true
+        type: string
+      - description: Receipt ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Item ID
+        in: path
+        name: itemId
+        required: true
+        type: string
+      - description: Line item changes
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/receipt.itemRequest'
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Envelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/receipt.itemResponse'
+              type: object
+      security:
+      - BearerAuth: []
+      summary: Correct a receipt line item
+      tags:
+      - receipts
+  /trips/{code}/receipts/{id}/shares:
+    get:
+      parameters:
+      - description: Trip code
+        in: path
+        name: code
+        required: true
+        type: string
+      - description: Receipt ID
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Envelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/receipt.shareResponse'
+              type: object
+      security:
+      - BearerAuth: []
+      summary: Calculate receipt shares
+      tags:
+      - receipts
   /trips/{code}/settlements:
     get:
       parameters:
