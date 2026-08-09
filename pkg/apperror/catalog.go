@@ -32,6 +32,8 @@ var catalog = map[string]definition{
 	"ALREADY_PARTICIPANT":        {http.StatusConflict, "User is already a trip participant"},
 	"TRIP_CODE_COLLISION":        {http.StatusConflict, "Could not generate a unique trip code"},
 	"CONCURRENT_MODIFICATION":    {http.StatusConflict, "The record was modified by another request"},
+	"FILE_TOO_LARGE":             {http.StatusRequestEntityTooLarge, "The uploaded file is too large"},
+	"UNSUPPORTED_MEDIA_TYPE":     {http.StatusUnsupportedMediaType, "The uploaded file type is not supported"},
 	"EXCHANGE_RATE_MISSING":      {http.StatusUnprocessableEntity, "An exchange rate is required"},
 	"PARTICIPANT_HAS_ACTIVITY":   {http.StatusUnprocessableEntity, "Participant has financial activity"},
 	"RATE_LIMITED":               {http.StatusTooManyRequests, "Too many requests"},

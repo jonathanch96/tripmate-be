@@ -1,7 +1,6 @@
 package expense
 
 import (
-	"errors"
 	"testing"
 
 	"github.com/google/uuid"
@@ -24,7 +23,6 @@ func TestCalculateSplitsRequiredTable(t *testing.T) {
 		input     SplitInput
 		want      []string
 		errorCode string
-		notBuilt  bool
 	}{
 		{name: "equal clean", input: SplitInput{Amount: amount("100.00"), Currency: "PHP", SplitType: domainexpense.SplitEqual, Participants: participants}, want: []string{"25", "25", "25", "25"}},
 		{name: "equal remainder follows uuid order", input: SplitInput{Amount: amount("100.00"), Currency: "PHP", SplitType: domainexpense.SplitEqual, Participants: participants[:3]}, want: []string{"33.34", "33.33", "33.33"}},
@@ -36,17 +34,32 @@ func TestCalculateSplitsRequiredTable(t *testing.T) {
 		{name: "manual zero allowed", input: SplitInput{Amount: amount("100"), Currency: "PHP", SplitType: domainexpense.SplitManual, Manual: map[uuid.UUID]decimal.Decimal{participants[0]: amount("100"), participants[1]: decimal.Zero}}, want: []string{"100", "0"}},
 		{name: "manual negative rejected", input: SplitInput{Amount: amount("100"), Currency: "PHP", SplitType: domainexpense.SplitManual, Manual: map[uuid.UUID]decimal.Decimal{participants[0]: amount("-10"), participants[1]: amount("110")}}, errorCode: "VALIDATION_FAILED"},
 		{name: "equal requires participants", input: SplitInput{Amount: amount("100"), Currency: "PHP", SplitType: domainexpense.SplitEqual}, errorCode: "VALIDATION_FAILED"},
-		{name: "item deferred", input: SplitInput{Amount: amount("100"), Currency: "PHP", SplitType: domainexpense.SplitItem}, notBuilt: true},
+		{name: "item requires at least one line", input: SplitInput{Amount: amount("100"), Currency: "PHP", SplitType: domainexpense.SplitItem}, errorCode: "VALIDATION_FAILED"},
+		{name: "item charges each line to whoever shared it", input: SplitInput{Currency: "PHP", SplitType: domainexpense.SplitItem, Items: []ItemAssignment{
+			{Amount: amount("300"), UserIDs: []uuid.UUID{participants[0]}},
+			{Amount: amount("200"), UserIDs: []uuid.UUID{participants[1]}},
+		}}, want: []string{"300", "200"}},
+		{name: "item shared by three allocates to the cent", input: SplitInput{Currency: "PHP", SplitType: domainexpense.SplitItem, Items: []ItemAssignment{
+			{Amount: amount("100"), UserIDs: []uuid.UUID{participants[0], participants[1], participants[2]}},
+		}}, want: []string{"33.34", "33.33", "33.33"}},
+		{name: "item spreads extras in proportion to what was eaten", input: SplitInput{Currency: "PHP", SplitType: domainexpense.SplitItem, Extras: amount("100"), Items: []ItemAssignment{
+			{Amount: amount("300"), UserIDs: []uuid.UUID{participants[0]}},
+			{Amount: amount("100"), UserIDs: []uuid.UUID{participants[1]}},
+		}}, want: []string{"375", "125"}},
+		{name: "item leaves a diner who ate nothing free of extras", input: SplitInput{Currency: "PHP", SplitType: domainexpense.SplitItem, Extras: amount("50"), Items: []ItemAssignment{
+			{Amount: amount("200"), UserIDs: []uuid.UUID{participants[0]}},
+			{Amount: decimal.Zero, UserIDs: []uuid.UUID{participants[1]}},
+		}}, want: []string{"250", "0"}},
+		{name: "item rejects an unassigned line", input: SplitInput{Currency: "PHP", SplitType: domainexpense.SplitItem, Items: []ItemAssignment{
+			{Amount: amount("100")},
+		}}, errorCode: "VALIDATION_FAILED"},
+		{name: "item rejects a stated total that does not match the bill", input: SplitInput{Amount: amount("999"), Currency: "PHP", SplitType: domainexpense.SplitItem, Items: []ItemAssignment{
+			{Amount: amount("100"), UserIDs: []uuid.UUID{participants[0]}},
+		}}, errorCode: "SPLIT_SUM_MISMATCH"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			got, err := CalculateSplits(test.input)
-			if test.notBuilt {
-				if !errors.Is(err, ErrNotImplemented) {
-					t.Fatalf("error = %v", err)
-				}
-				return
-			}
 			if test.errorCode != "" {
 				if !apperror.Is(err, test.errorCode) {
 					t.Fatalf("error = %v, want %s", err, test.errorCode)
@@ -117,6 +130,63 @@ func TestSplitAndPayerSumsAlwaysMatch(t *testing.T) {
 		}
 		if err := ValidatePayers(total, currency, payers); err != nil {
 			t.Fatal(err)
+		}
+	})
+}
+
+// Test-plan item 4: whatever the bill looks like — however many lines, however they are shared,
+// whatever the tax — the splits must add up to items + extras exactly, in every currency scale.
+func TestItemSplitAlwaysSumsToTheBill(t *testing.T) {
+	rapid.Check(t, func(t *rapid.T) {
+		currency := rapid.SampledFrom([]string{"PHP", "USD", "IDR", "JPY"}).Draw(t, "currency")
+		scale := displayScale(currency)
+		diners := rapid.IntRange(1, 8).Draw(t, "diners")
+		ids := make([]uuid.UUID, diners)
+		for index := range ids {
+			ids[index] = uuid.MustParse("00000000-0000-0000-0000-" + leftPad(index+1))
+		}
+		lines := rapid.IntRange(1, 12).Draw(t, "lines")
+		items := make([]ItemAssignment, lines)
+		itemsTotal := decimal.Zero
+		for index := range items {
+			price := decimal.New(rapid.Int64Range(0, 5_000_000).Draw(t, "price"), -scale)
+			shared := rapid.IntRange(1, diners).Draw(t, "shared")
+			// Pick `shared` distinct diners starting from a random offset.
+			offset := rapid.IntRange(0, diners-1).Draw(t, "offset")
+			assignees := make([]uuid.UUID, shared)
+			for i := range assignees {
+				assignees[i] = ids[(offset+i)%diners]
+			}
+			items[index] = ItemAssignment{Amount: price, UserIDs: assignees}
+			itemsTotal = itemsTotal.Add(price)
+		}
+		extras := decimal.New(rapid.Int64Range(0, 2_000_000).Draw(t, "extras"), -scale)
+
+		splits, err := CalculateSplits(SplitInput{Currency: currency, SplitType: domainexpense.SplitItem, Items: items, Extras: extras})
+		if err != nil {
+			t.Fatal(err)
+		}
+		parts := make([]decimal.Decimal, len(splits))
+		for index := range splits {
+			parts[index] = splits[index].Amount
+			if parts[index].IsNegative() {
+				t.Fatalf("split[%d] = %s is negative", index, parts[index])
+			}
+		}
+		want := itemsTotal.Add(extras).RoundBank(scale)
+		if !sum(parts).Equal(want) {
+			t.Fatalf("split sum = %s, want %s", sum(parts), want)
+		}
+		// Nobody may appear twice, and the order must be deterministic by user id.
+		seen := make(map[uuid.UUID]struct{}, len(splits))
+		for index, split := range splits {
+			if _, exists := seen[split.UserID]; exists {
+				t.Fatalf("user %s appears twice", split.UserID)
+			}
+			seen[split.UserID] = struct{}{}
+			if index > 0 && splits[index-1].UserID.String() >= split.UserID.String() {
+				t.Fatalf("splits are not sorted by user id: %s then %s", splits[index-1].UserID, split.UserID)
+			}
 		}
 	})
 }

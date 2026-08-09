@@ -1,7 +1,6 @@
 package expense
 
 import (
-	"errors"
 	"fmt"
 	"sort"
 
@@ -12,9 +11,12 @@ import (
 	"github.com/shopspring/decimal"
 )
 
-var ErrNotImplemented = errors.New("item split calculation is not implemented")
-
-type ItemAssignment struct{}
+// ItemAssignment is one line of a bill together with everyone sharing it. A line shared by several
+// people is the normal case, not the exception.
+type ItemAssignment struct {
+	Amount  decimal.Decimal
+	UserIDs []uuid.UUID
+}
 
 type SplitInput struct {
 	Amount       decimal.Decimal
@@ -23,6 +25,9 @@ type SplitInput struct {
 	Participants []uuid.UUID
 	Manual       map[uuid.UUID]decimal.Decimal
 	Items        []ItemAssignment
+	// Extras is tax plus service charge, allocated across diners in proportion to what they ate.
+	// Only meaningful for an item split.
+	Extras decimal.Decimal
 }
 
 func CalculateSplits(input SplitInput) ([]domainexpense.Split, error) {
@@ -63,10 +68,76 @@ func CalculateSplits(input SplitInput) ([]domainexpense.Split, error) {
 		}
 		return result, nil
 	case domainexpense.SplitItem:
-		return nil, ErrNotImplemented
+		return splitByItem(input)
 	default:
 		return nil, apperror.New("VALIDATION_FAILED")
 	}
+}
+
+// splitByItem charges each line to the people who shared it, then spreads tax and service across
+// them in proportion to what they ate. Every step allocates through money's exact-sum helpers, so
+// the resulting splits add up to the bill to the cent rather than to within a rounding error.
+func splitByItem(input SplitInput) ([]domainexpense.Split, error) {
+	if len(input.Items) == 0 {
+		return nil, apperror.New("VALIDATION_FAILED")
+	}
+	subtotals := make(map[uuid.UUID]decimal.Decimal)
+	itemsTotal := decimal.Zero
+	for _, item := range input.Items {
+		if len(item.UserIDs) == 0 {
+			// F-05/A-3: an unassigned line must be resolved before it can reach a split.
+			return nil, apperror.WithFields("VALIDATION_FAILED", []apperror.FieldError{{Field: "items", Rule: "assigned", Message: "every item must be assigned to at least one participant"}})
+		}
+		if item.Amount.IsNegative() {
+			return nil, apperror.New("VALIDATION_FAILED")
+		}
+		assignees := append([]uuid.UUID(nil), item.UserIDs...)
+		sort.Slice(assignees, func(i, j int) bool { return assignees[i].String() < assignees[j].String() })
+		if hasDuplicate(assignees) {
+			return nil, apperror.New("VALIDATION_FAILED")
+		}
+		shares := money.SplitEqual(item.Amount, len(assignees), input.Currency)
+		for index, userID := range assignees {
+			subtotals[userID] = subtotals[userID].Add(shares[index])
+		}
+		itemsTotal = itemsTotal.Add(item.Amount)
+	}
+
+	diners := make([]uuid.UUID, 0, len(subtotals))
+	for userID := range subtotals {
+		diners = append(diners, userID)
+	}
+	sort.Slice(diners, func(i, j int) bool { return diners[i].String() < diners[j].String() })
+
+	weights := make([]decimal.Decimal, len(diners))
+	for index, userID := range diners {
+		weights[index] = subtotals[userID]
+	}
+	extras := input.Extras
+	if extras.IsNegative() {
+		return nil, apperror.New("VALIDATION_FAILED")
+	}
+	allocated := money.SplitProportional(extras, weights, input.Currency)
+
+	result := make([]domainexpense.Split, len(diners))
+	values := make([]decimal.Decimal, len(diners))
+	for index, userID := range diners {
+		values[index] = subtotals[userID].Add(allocated[index])
+		result[index] = domainexpense.Split{UserID: userID, Amount: values[index]}
+	}
+
+	// The splits must reconstruct the bill exactly. Amount is the authority when the caller supplies
+	// one, so a mismatch is a real inconsistency rather than a rounding artifact.
+	scale := displayScale(input.Currency)
+	expected := itemsTotal.Add(extras)
+	if input.Amount.IsPositive() {
+		expected = input.Amount
+	}
+	if !sum(values).RoundBank(scale).Equal(expected.RoundBank(scale)) {
+		message := fmt.Sprintf("splits sum to %s; expected %s", sum(values).String(), expected.String())
+		return nil, apperror.WithFields("SPLIT_SUM_MISMATCH", []apperror.FieldError{{Field: "splits", Rule: "sum", Message: message}})
+	}
+	return result, nil
 }
 
 func ValidatePayers(amount decimal.Decimal, currency string, payers []domainexpense.Payer) error {

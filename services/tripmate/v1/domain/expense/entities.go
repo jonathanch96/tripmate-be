@@ -31,6 +31,12 @@ type CreateInput struct {
 	Participants []uuid.UUID
 	Manual       map[uuid.UUID]decimal.Decimal
 	Note         *string
+	// Items and Extras carry an itemised bill: which lines each diner shared, and the tax and
+	// service to spread across them. Only read for SplitItem.
+	Items  []ItemAssignment
+	Extras decimal.Decimal
+	// Source records where the expense came from. Empty means a person typed it in.
+	Source domainexpense.Source
 }
 
 type UpdateInput struct {

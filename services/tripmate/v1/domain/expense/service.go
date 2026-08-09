@@ -46,7 +46,7 @@ func (s *service) Create(ctx context.Context, actor identity.Identity, tc tripct
 	if err := ValidatePayers(input.Amount, input.Currency, input.Payers); err != nil {
 		return nil, err
 	}
-	splits, err := CalculateSplits(SplitInput{Amount: input.Amount, Currency: input.Currency, SplitType: input.SplitType, Participants: input.Participants, Manual: input.Manual})
+	splits, err := CalculateSplits(SplitInput{Amount: input.Amount, Currency: input.Currency, SplitType: input.SplitType, Participants: input.Participants, Manual: input.Manual, Items: input.Items, Extras: input.Extras})
 	if err != nil {
 		return nil, err
 	}
@@ -64,7 +64,7 @@ func (s *service) Create(ctx context.Context, actor identity.Identity, tc tripct
 	now := s.deps.Clock().UTC()
 	entity := &domainexpense.Expense{ID: uuid.New(), TripID: tc.Trip.ID, ExpenseDate: date(input.ExpenseDate),
 		Description: strings.TrimSpace(input.Description), Amount: input.Amount, Currency: input.Currency,
-		SplitType: input.SplitType, Status: status, Source: domainexpense.SourceManual, Note: input.Note,
+		SplitType: input.SplitType, Status: status, Source: source(input.Source), Note: input.Note,
 		CreatedByUserID: actor.UserID, Version: 1, Payers: input.Payers, Splits: splits, CreatedAt: now, UpdatedAt: now}
 	err = s.deps.UOW.Do(ctx, func(txctx context.Context) error {
 		if _, createErr := s.deps.Expenses.Create(txctx, entity); createErr != nil {
@@ -304,4 +304,12 @@ func validateDate(tc tripctx.TripContext, value time.Time) error {
 func date(value time.Time) time.Time {
 	y, m, d := value.UTC().Date()
 	return time.Date(y, m, d, 0, 0, 0, 0, time.UTC)
+}
+
+// source defaults to a hand-entered expense; a receipt conversion says so explicitly.
+func source(value domainexpense.Source) domainexpense.Source {
+	if value == "" {
+		return domainexpense.SourceManual
+	}
+	return value
 }
