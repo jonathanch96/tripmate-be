@@ -9,4 +9,3 @@ FROM gcr.io/distroless/static-debian12:nonroot
 COPY --from=build /tripmate-api /tripmate-api
 EXPOSE 8080
 ENTRYPOINT ["/tripmate-api"]
-

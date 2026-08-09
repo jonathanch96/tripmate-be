@@ -89,6 +89,16 @@ func (a *adapterGormPostgresql) Upsert(ctx context.Context, row domainfx.Rate) (
 	return &result, nil
 }
 
+func (a *adapterGormPostgresql) DeleteTripPair(ctx context.Context, tripID uuid.UUID, from, to string) error {
+	err := appdb.FromContext(ctx, a.db).WithContext(ctx).
+		Where("trip_id = ? AND from_currency = ? AND to_currency = ?", tripID, normalize(from), normalize(to)).
+		Delete(&ExchangeRate{}).Error
+	if err != nil {
+		return apperror.Wrap(err, "INTERNAL_ERROR")
+	}
+	return nil
+}
+
 func (a *adapterGormPostgresql) ListGlobal(ctx context.Context) ([]domainfx.Rate, error) {
 	var models []ExchangeRate
 	if err := appdb.FromContext(ctx, a.db).WithContext(ctx).Where("trip_id IS NULL").Order("from_currency, to_currency").Find(&models).Error; err != nil {

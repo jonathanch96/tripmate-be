@@ -1,0 +1,17 @@
+FROM golang:1.26.5-alpine AS build
+WORKDIR /src
+COPY go.mod go.sum ./
+RUN go mod download
+COPY . .
+RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /tripmate-api ./adapters/rest \
+    && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /tripmate-migrate ./cmd/migrate \
+    && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /healthcheck ./cmd/healthcheck
+
+FROM gcr.io/distroless/static-debian12:nonroot
+COPY --from=build /tripmate-api /tripmate-api
+COPY --from=build /tripmate-migrate /tripmate-migrate
+COPY --from=build /healthcheck /healthcheck
+COPY migrations /migrations
+EXPOSE 8080
+HEALTHCHECK --interval=10s --timeout=3s --start-period=20s --retries=5 CMD ["/healthcheck"]
+ENTRYPOINT ["/tripmate-api"]

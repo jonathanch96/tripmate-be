@@ -40,7 +40,23 @@ func (s *service) SetTripRate(ctx context.Context, _ identity.Identity, tc tripc
 		return nil, apperror.New("VALIDATION_FAILED")
 	}
 	now := s.deps.Clock().UTC()
-	return s.deps.Repo.Upsert(ctx, domainfx.Rate{ID: uuid.New(), TripID: &tc.Trip.ID, FromCurrency: in.FromCurrency, ToCurrency: in.ToCurrency, Rate: in.Rate, IsFinal: true, Source: domainfx.SourceManual, EffectiveAt: now, CreatedAt: now, UpdatedAt: now})
+	// A currency pair is one slot, not two. RateTable already reads a stored A→B backwards by
+	// dividing, so keeping an explicit B→A row alongside it lets the two directions drift into
+	// contradiction (IDR→PHP 300 next to PHP→IDR 300 round-trips 1 IDR into 90,000 IDR). The
+	// direction the planner just submitted wins and the opposite row is dropped.
+	var saved *domainfx.Rate
+	err := s.deps.UOW.Do(ctx, func(ctx context.Context) error {
+		if err := s.deps.Repo.DeleteTripPair(ctx, tc.Trip.ID, in.ToCurrency, in.FromCurrency); err != nil {
+			return err
+		}
+		row, err := s.deps.Repo.Upsert(ctx, domainfx.Rate{ID: uuid.New(), TripID: &tc.Trip.ID, FromCurrency: in.FromCurrency, ToCurrency: in.ToCurrency, Rate: in.Rate, IsFinal: true, Source: domainfx.SourceManual, EffectiveAt: now, CreatedAt: now, UpdatedAt: now})
+		saved = row
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+	return saved, nil
 }
 func (s *service) ListForTrip(ctx context.Context, tc tripctx.TripContext) ([]domainfx.Rate, error) {
 	return s.deps.Repo.ListEffective(ctx, tc.Trip.ID)
@@ -54,7 +70,15 @@ func (s *service) LockAll(ctx context.Context, tripID uuid.UUID) error {
 		return err
 	}
 	now := s.deps.Clock().UTC()
+	// Global rows may carry both directions of a pair; locking them verbatim would recreate the
+	// contradiction SetTripRate prevents, so only the first direction seen is pinned to the trip.
+	locked := make(map[pairKey]struct{}, len(rows))
 	for _, row := range rows {
+		from, to := normalize(row.FromCurrency), normalize(row.ToCurrency)
+		if _, done := locked[pairKey{from: to, to: from}]; done {
+			continue
+		}
+		locked[pairKey{from: from, to: to}] = struct{}{}
 		row.TripID = &tripID
 		row.ID = uuid.New()
 		row.IsFinal = true
