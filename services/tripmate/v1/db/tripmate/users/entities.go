@@ -11,7 +11,8 @@ type User struct {
 	ID           uuid.UUID      `gorm:"column:id;type:uuid;primaryKey"`
 	Email        string         `gorm:"column:email;type:citext;not null"`
 	Name         string         `gorm:"column:name;not null"`
-	PasswordHash string         `gorm:"column:password_hash;not null"`
+	PasswordHash string         `gorm:"column:password_hash"`
+	GoogleID     *string        `gorm:"column:google_id"`
 	AvatarURL    *string        `gorm:"column:avatar_url"`
 	CreatedAt    time.Time      `gorm:"column:created_at"`
 	UpdatedAt    time.Time      `gorm:"column:updated_at"`

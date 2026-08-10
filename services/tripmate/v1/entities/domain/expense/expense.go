@@ -13,9 +13,11 @@ type Status string
 type Source string
 
 const (
-	SplitEqual  SplitType = "equal"
-	SplitManual SplitType = "manual"
-	SplitItem   SplitType = "item"
+	SplitEqual   SplitType = "equal"
+	SplitManual  SplitType = "manual"
+	SplitItem    SplitType = "item"
+	SplitPercent SplitType = "percent"
+	SplitShares  SplitType = "shares"
 
 	StatusPending  Status = "pending"
 	StatusApproved Status = "approved"
@@ -35,12 +37,17 @@ type Payer struct {
 type Split struct {
 	ID, ExpenseID, UserID uuid.UUID
 	Amount                decimal.Decimal
-	User                  *domainuser.User
-	CreatedAt             time.Time
+	// Weight carries the caller's original percent value (0-100) or share count for a percent/shares
+	// split, alongside the computed Amount, so the client can re-render/edit without losing precision.
+	// It is nil for equal/manual/item splits.
+	Weight    *decimal.Decimal
+	User      *domainuser.User
+	CreatedAt time.Time
 }
 
 type Expense struct {
 	ID, TripID, CreatedByUserID uuid.UUID
+	CategoryID                  *uuid.UUID
 	ExpenseDate                 time.Time
 	Description                 string
 	Amount                      decimal.Decimal

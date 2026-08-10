@@ -14,6 +14,7 @@ func (c *controller) RegisterRoutes(group *gin.RouterGroup) {
 	auth := group.Group("/auth")
 	auth.POST("/register", c.Register)
 	auth.POST("/login", c.Login)
+	auth.POST("/google", c.Google)
 	auth.POST("/refresh", c.Refresh)
 	auth.POST("/logout", c.Logout)
 }
@@ -61,6 +62,30 @@ func (c *controller) Login(ctx *gin.Context) {
 		return
 	}
 	session, err := c.users.Authenticate(ctx.Request.Context(), request.Email, request.Password)
+	if err != nil {
+		response.Error(ctx, err)
+		return
+	}
+	response.OK(ctx, "LOGIN_SUCCESS", authresp.FromSession(session))
+}
+
+// Google godoc
+// @Summary Sign in with a verified Google ID token
+// @Tags auth
+// @Accept json
+// @Produce json
+// @Param body body authrequest.Google true "Google ID token"
+// @Success 200 {object} response.Envelope{data=authresponse.Session}
+// @Failure 400 {object} response.Envelope
+// @Failure 401 {object} response.Envelope
+// @Router /auth/google [post]
+func (c *controller) Google(ctx *gin.Context) {
+	var request authreq.Google
+	if err := ctx.ShouldBindJSON(&request); err != nil {
+		response.Error(ctx, apperror.WithFields("VALIDATION_FAILED", appvalidator.Translate(err)))
+		return
+	}
+	session, err := c.users.AuthenticateGoogle(ctx.Request.Context(), request.IDToken)
 	if err != nil {
 		response.Error(ctx, err)
 		return

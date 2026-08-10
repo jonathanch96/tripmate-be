@@ -7,13 +7,17 @@ import (
 )
 
 type User struct {
-	ID           uuid.UUID
-	Email        string
-	Name         string
+	ID    uuid.UUID
+	Email string
+	Name  string
+	// PasswordHash is empty for an account created via Google sign-in.
 	PasswordHash string
-	AvatarURL    *string
-	CreatedAt    time.Time
-	UpdatedAt    time.Time
+	// GoogleID is the Google account's stable subject ("sub") claim, set once a user signs in
+	// with Google (either at account creation or by linking an existing password account).
+	GoogleID  *string
+	AvatarURL *string
+	CreatedAt time.Time
+	UpdatedAt time.Time
 }
 
 type PublicUser struct {

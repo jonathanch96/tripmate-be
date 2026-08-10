@@ -46,7 +46,12 @@ func (s *service) Create(ctx context.Context, actor identity.Identity, tc tripct
 	if err := ValidatePayers(input.Amount, input.Currency, input.Payers); err != nil {
 		return nil, err
 	}
-	splits, err := CalculateSplits(SplitInput{Amount: input.Amount, Currency: input.Currency, SplitType: input.SplitType, Participants: input.Participants, Manual: input.Manual, Items: input.Items, Extras: input.Extras})
+	if input.CategoryID != nil {
+		if err := s.validateCategory(ctx, tc.Trip.ID, *input.CategoryID); err != nil {
+			return nil, err
+		}
+	}
+	splits, err := CalculateSplits(SplitInput{Amount: input.Amount, Currency: input.Currency, SplitType: input.SplitType, Participants: input.Participants, Manual: input.Manual, Weights: input.Weights, Items: input.Items, Extras: input.Extras})
 	if err != nil {
 		return nil, err
 	}
@@ -62,7 +67,7 @@ func (s *service) Create(ctx context.Context, actor identity.Identity, tc tripct
 		status = domainexpense.StatusPending
 	}
 	now := s.deps.Clock().UTC()
-	entity := &domainexpense.Expense{ID: uuid.New(), TripID: tc.Trip.ID, ExpenseDate: date(input.ExpenseDate),
+	entity := &domainexpense.Expense{ID: uuid.New(), TripID: tc.Trip.ID, CategoryID: input.CategoryID, ExpenseDate: date(input.ExpenseDate),
 		Description: strings.TrimSpace(input.Description), Amount: input.Amount, Currency: input.Currency,
 		SplitType: input.SplitType, Status: status, Source: source(input.Source), Note: input.Note,
 		CreatedByUserID: actor.UserID, Version: 1, Payers: input.Payers, Splits: splits, CreatedAt: now, UpdatedAt: now}
@@ -120,16 +125,26 @@ func (s *service) Update(ctx context.Context, actor identity.Identity, tc tripct
 	if input.SplitType != nil {
 		entity.SplitType = *input.SplitType
 	}
+	if input.CategoryID != nil {
+		if *input.CategoryID == uuid.Nil {
+			entity.CategoryID = nil
+		} else {
+			if err = s.validateCategory(ctx, tc.Trip.ID, *input.CategoryID); err != nil {
+				return nil, err
+			}
+			entity.CategoryID = input.CategoryID
+		}
+	}
 	if !money.IsSupportedCurrency(entity.Currency) || !tc.Trip.AllowsCurrency(entity.Currency) {
 		return nil, apperror.New("INVALID_CURRENCY")
 	}
-	rowsChanged := input.Amount != nil || input.Currency != nil || input.SplitType != nil || input.Payers != nil || input.Participants != nil || input.Manual != nil
+	rowsChanged := input.Amount != nil || input.Currency != nil || input.SplitType != nil || input.Payers != nil || input.Participants != nil || input.Manual != nil || input.Weights != nil
 	if rowsChanged {
 		if err = ValidatePayers(entity.Amount, entity.Currency, input.Payers); err != nil {
 			return nil, err
 		}
 		entity.Payers = input.Payers
-		entity.Splits, err = CalculateSplits(SplitInput{Amount: entity.Amount, Currency: entity.Currency, SplitType: entity.SplitType, Participants: input.Participants, Manual: input.Manual})
+		entity.Splits, err = CalculateSplits(SplitInput{Amount: entity.Amount, Currency: entity.Currency, SplitType: entity.SplitType, Participants: input.Participants, Manual: input.Manual, Weights: input.Weights})
 		if err != nil {
 			return nil, err
 		}
@@ -261,6 +276,22 @@ func (s *service) expense(ctx context.Context, tc tripctx.TripContext, id uuid.U
 		return nil, apperror.New("EXPENSE_NOT_FOUND")
 	}
 	return entity, nil
+}
+
+// validateCategory confirms the category is either a global default or belongs to this trip, so an
+// expense can't be tagged with another trip's custom category.
+func (s *service) validateCategory(ctx context.Context, tripID, categoryID uuid.UUID) error {
+	if s.deps.Categories == nil {
+		return nil
+	}
+	category, err := s.deps.Categories.GetByID(ctx, categoryID)
+	if err != nil {
+		return err
+	}
+	if category.TripID != nil && *category.TripID != tripID {
+		return apperror.New("EXPENSE_CATEGORY_NOT_FOUND")
+	}
+	return nil
 }
 
 func (s *service) activeParticipants(ctx context.Context, tripID uuid.UUID) ([]uuid.UUID, error) {

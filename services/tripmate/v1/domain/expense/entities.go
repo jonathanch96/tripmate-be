@@ -26,11 +26,14 @@ type CreateInput struct {
 	Description  string
 	Amount       decimal.Decimal
 	Currency     string
+	CategoryID   *uuid.UUID
 	SplitType    domainexpense.SplitType
 	Payers       []domainexpense.Payer
 	Participants []uuid.UUID
 	Manual       map[uuid.UUID]decimal.Decimal
-	Note         *string
+	// Weights carries percentages/shares for a percent/shares split. Only read for those split types.
+	Weights map[uuid.UUID]decimal.Decimal
+	Note    *string
 	// Items and Extras carry an itemised bill: which lines each diner shared, and the tax and
 	// service to spread across them. Only read for SplitItem.
 	Items  []ItemAssignment
@@ -44,10 +47,12 @@ type UpdateInput struct {
 	Description  *string
 	Amount       *decimal.Decimal
 	Currency     *string
+	CategoryID   *uuid.UUID
 	SplitType    *domainexpense.SplitType
 	Payers       []domainexpense.Payer
 	Participants []uuid.UUID
 	Manual       map[uuid.UUID]decimal.Decimal
+	Weights      map[uuid.UUID]decimal.Decimal
 	Note         *string
 	Version      int
 }

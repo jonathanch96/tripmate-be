@@ -24,7 +24,10 @@ type SplitInput struct {
 	SplitType    domainexpense.SplitType
 	Participants []uuid.UUID
 	Manual       map[uuid.UUID]decimal.Decimal
-	Items        []ItemAssignment
+	// Weights carries percentages (0-100, summing to 100) for a percent split, or arbitrary positive
+	// share counts for a shares split. Only read for SplitPercent/SplitShares.
+	Weights map[uuid.UUID]decimal.Decimal
+	Items   []ItemAssignment
 	// Extras is tax plus service charge, allocated across diners in proportion to what they ate.
 	// Only meaningful for an item split.
 	Extras decimal.Decimal
@@ -69,9 +72,67 @@ func CalculateSplits(input SplitInput) ([]domainexpense.Split, error) {
 		return result, nil
 	case domainexpense.SplitItem:
 		return splitByItem(input)
+	case domainexpense.SplitPercent:
+		return splitByPercent(input)
+	case domainexpense.SplitShares:
+		return splitByShares(input)
 	default:
 		return nil, apperror.New("VALIDATION_FAILED")
 	}
+}
+
+// splitByPercent distributes the amount in proportion to each participant's declared percentage,
+// which must sum to 100 so the split reflects exactly what the caller asked for.
+func splitByPercent(input SplitInput) ([]domainexpense.Split, error) {
+	participants, weights, err := sortedWeights(input.Weights)
+	if err != nil {
+		return nil, err
+	}
+	total := sum(weights)
+	if !total.RoundBank(2).Equal(decimal.NewFromInt(100)) {
+		message := fmt.Sprintf("percentages sum to %s; expected 100", total.String())
+		return nil, apperror.WithFields("SPLIT_PERCENT_MISMATCH", []apperror.FieldError{{Field: "splits", Rule: "sum", Message: message}})
+	}
+	return weightedSplits(input, participants, weights), nil
+}
+
+// splitByShares distributes the amount in proportion to each participant's declared share count.
+// Shares have no fixed total to sum to - only the ratio between them matters.
+func splitByShares(input SplitInput) ([]domainexpense.Split, error) {
+	participants, weights, err := sortedWeights(input.Weights)
+	if err != nil {
+		return nil, err
+	}
+	return weightedSplits(input, participants, weights), nil
+}
+
+func sortedWeights(weights map[uuid.UUID]decimal.Decimal) ([]uuid.UUID, []decimal.Decimal, error) {
+	if len(weights) == 0 {
+		return nil, nil, apperror.New("VALIDATION_FAILED")
+	}
+	participants := make([]uuid.UUID, 0, len(weights))
+	for userID, weight := range weights {
+		if !weight.IsPositive() {
+			return nil, nil, apperror.New("VALIDATION_FAILED")
+		}
+		participants = append(participants, userID)
+	}
+	sort.Slice(participants, func(i, j int) bool { return participants[i].String() < participants[j].String() })
+	values := make([]decimal.Decimal, len(participants))
+	for index, userID := range participants {
+		values[index] = weights[userID]
+	}
+	return participants, values, nil
+}
+
+func weightedSplits(input SplitInput, participants []uuid.UUID, weights []decimal.Decimal) []domainexpense.Split {
+	amounts := money.SplitProportional(input.Amount, weights, input.Currency)
+	result := make([]domainexpense.Split, len(participants))
+	for index, userID := range participants {
+		weight := weights[index]
+		result[index] = domainexpense.Split{UserID: userID, Amount: amounts[index], Weight: &weight}
+	}
+	return result
 }
 
 // splitByItem charges each line to the people who shared it, then spreads tax and service across

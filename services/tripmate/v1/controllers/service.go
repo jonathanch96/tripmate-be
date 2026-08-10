@@ -9,9 +9,11 @@ import (
 	apphash "github.com/jblabs/tripmate-be/pkg/hash"
 	appjwt "github.com/jblabs/tripmate-be/pkg/jwt"
 	"github.com/jblabs/tripmate-be/pkg/middleware"
+	googleoauth "github.com/jblabs/tripmate-be/pkg/oauth/google"
 	"github.com/jblabs/tripmate-be/pkg/response"
 	authcontroller "github.com/jblabs/tripmate-be/services/tripmate/v1/controllers/auth"
 	expensecontroller "github.com/jblabs/tripmate-be/services/tripmate/v1/controllers/expense"
+	expensecategorycontroller "github.com/jblabs/tripmate-be/services/tripmate/v1/controllers/expense_category"
 	financecontroller "github.com/jblabs/tripmate-be/services/tripmate/v1/controllers/finance"
 	invitationcontroller "github.com/jblabs/tripmate-be/services/tripmate/v1/controllers/invitation"
 	participantcontroller "github.com/jblabs/tripmate-be/services/tripmate/v1/controllers/participant"
@@ -20,6 +22,7 @@ import (
 	usercontroller "github.com/jblabs/tripmate-be/services/tripmate/v1/controllers/user"
 	appdb "github.com/jblabs/tripmate-be/services/tripmate/v1/db"
 	ratesdb "github.com/jblabs/tripmate-be/services/tripmate/v1/db/tripmate/exchange_rates"
+	categoriesdb "github.com/jblabs/tripmate-be/services/tripmate/v1/db/tripmate/expense_categories"
 	payersdb "github.com/jblabs/tripmate-be/services/tripmate/v1/db/tripmate/expense_payers"
 	splitsdb "github.com/jblabs/tripmate-be/services/tripmate/v1/db/tripmate/expense_splits"
 	expensesdb "github.com/jblabs/tripmate-be/services/tripmate/v1/db/tripmate/expenses"
@@ -33,6 +36,7 @@ import (
 	users "github.com/jblabs/tripmate-be/services/tripmate/v1/db/tripmate/users"
 	balancedomain "github.com/jblabs/tripmate-be/services/tripmate/v1/domain/balance"
 	expensedomain "github.com/jblabs/tripmate-be/services/tripmate/v1/domain/expense"
+	expensecategorydomain "github.com/jblabs/tripmate-be/services/tripmate/v1/domain/expense_category"
 	finaldomain "github.com/jblabs/tripmate-be/services/tripmate/v1/domain/finalization"
 	fxdomain "github.com/jblabs/tripmate-be/services/tripmate/v1/domain/fx"
 	invitationdomain "github.com/jblabs/tripmate-be/services/tripmate/v1/domain/invitation"
@@ -55,15 +59,16 @@ type Dependencies struct {
 }
 
 type Service struct {
-	auth     authcontroller.Controller
-	users    usercontroller.Controller
-	trips    tripcontroller.Controller
-	parts    participantcontroller.Controller
-	invites  invitationcontroller.Controller
-	expenses expensecontroller.Controller
-	finance  financecontroller.Controller
-	receipts receiptcontroller.Controller
-	issuer   *appjwt.Issuer
+	auth       authcontroller.Controller
+	users      usercontroller.Controller
+	trips      tripcontroller.Controller
+	parts      participantcontroller.Controller
+	invites    invitationcontroller.Controller
+	expenses   expensecontroller.Controller
+	categories expensecategorycontroller.Controller
+	finance    financecontroller.Controller
+	receipts   receiptcontroller.Controller
+	issuer     *appjwt.Issuer
 }
 
 func NewService(deps Dependencies) *Service {
@@ -72,20 +77,27 @@ func NewService(deps Dependencies) *Service {
 		AccessTTL: deps.Cfg.JWT.AccessTTL, RefreshTTL: deps.Cfg.JWT.RefreshTTL,
 	})
 	inviteRepo := invitesdb.New(deps.DB)
+	var googleVerifier userdomain.GoogleVerifier
+	if deps.Cfg.Google.ClientID != "" {
+		googleVerifier = googleVerifierAdapter{v: googleoauth.NewVerifier(deps.Cfg.Google.ClientID)}
+	}
 	userService := userdomain.NewService(userdomain.Dependencies{
 		Repo:   users.NewGormPostgresqlAdapter(deps.DB),
 		Tokens: refreshtokens.NewGormPostgresqlAdapter(deps.DB),
-		Hasher: apphash.NewArgon2Hasher(), Issuer: issuer, Invitations: inviteRepo,
+		Hasher: apphash.NewArgon2Hasher(), Issuer: issuer, Invitations: inviteRepo, Google: googleVerifier,
 	})
 	tripRepo := tripsdb.New(deps.DB)
 	partRepo := partsdb.New(deps.DB)
 	expenseRepo := expensesdb.New(deps.DB)
 	receiptRepo := receiptsdb.New(deps.DB)
+	categoryRepo := categoriesdb.New(deps.DB)
 	tripService := tripdomain.NewService(tripdomain.Dependencies{Repo: tripRepo, Participants: partRepo, Tx: tripTransactor{deps.DB}, Expenses: expenseRepo})
 	partService := participantdomain.NewService(partRepo, tripRepo, expenseRepo)
+	categoryService := expensecategorydomain.NewService(categoryRepo)
 	expenseService := expensedomain.NewService(expensedomain.Dependencies{
 		Expenses: expenseRepo, Payers: payersdb.New(deps.DB), Splits: splitsdb.New(deps.DB),
 		Participants: partRepo, Outbox: outboxdb.New(deps.DB), UOW: appdb.NewGormUnitOfWork(deps.DB), Receipts: receiptRepo,
+		Categories: categoryRepo,
 	})
 	receiptService := receiptdomain.NewService(receiptdomain.Dependencies{Repo: receiptRepo, Participants: partRepo,
 		Storage: deps.Storage, OCR: deps.OCR, Expenses: expenseService, UOW: appdb.NewGormUnitOfWork(deps.DB)})
@@ -100,9 +112,10 @@ func NewService(deps Dependencies) *Service {
 		trips:   tripcontroller.NewController(tripService, partService),
 		parts:   participantcontroller.NewController(tripService, partService),
 		invites: invitationcontroller.NewController(tripService, partService, inviteService), issuer: issuer,
-		expenses: expensecontroller.NewController(tripService, partService, expenseService),
-		finance:  financecontroller.NewController(tripService, partService, balanceService, settlementService, rateService, finalService),
-		receipts: receiptcontroller.NewController(tripService, partService, receiptService),
+		expenses:   expensecontroller.NewController(tripService, partService, expenseService),
+		categories: expensecategorycontroller.NewController(tripService, partService, categoryService),
+		finance:    financecontroller.NewController(tripService, partService, balanceService, settlementService, rateService, finalService),
+		receipts:   receiptcontroller.NewController(tripService, partService, receiptService),
 	}
 }
 
@@ -116,8 +129,22 @@ func (s *Service) RegisterRoutes(group *gin.RouterGroup) {
 	s.parts.RegisterRoutes(protected)
 	s.invites.RegisterRoutes(protected)
 	s.expenses.RegisterRoutes(protected)
+	s.categories.RegisterRoutes(protected)
 	s.finance.RegisterRoutes(protected)
 	s.receipts.RegisterRoutes(protected)
+}
+
+// googleVerifierAdapter adapts pkg/oauth/google's Verifier (which returns its own Claims type) to
+// the domain/user package's GoogleVerifier interface, so the domain layer doesn't need to import an
+// infrastructure package just to describe the shape of a verified Google identity.
+type googleVerifierAdapter struct{ v *googleoauth.Verifier }
+
+func (a googleVerifierAdapter) Verify(ctx context.Context, idToken string) (*userdomain.GoogleClaims, error) {
+	claims, err := a.v.Verify(ctx, idToken)
+	if err != nil {
+		return nil, err
+	}
+	return &userdomain.GoogleClaims{Subject: claims.Subject, Email: claims.Email, EmailVerified: claims.EmailVerified, Name: claims.Name}, nil
 }
 
 type tripTransactor struct{ db *gorm.DB }

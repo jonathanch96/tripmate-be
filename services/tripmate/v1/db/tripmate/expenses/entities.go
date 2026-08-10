@@ -11,6 +11,7 @@ import (
 type Expense struct {
 	ID                uuid.UUID       `gorm:"column:id;primaryKey"`
 	TripID            uuid.UUID       `gorm:"column:trip_id"`
+	CategoryID        *uuid.UUID      `gorm:"column:category_id"`
 	ExpenseDate       time.Time       `gorm:"column:expense_date;type:date"`
 	Description       string          `gorm:"column:description"`
 	Amount            decimal.Decimal `gorm:"column:amount;type:numeric(20,6)"`
