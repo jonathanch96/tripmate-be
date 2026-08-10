@@ -58,6 +58,24 @@ func (s *service) SetTripRate(ctx context.Context, _ identity.Identity, tc tripc
 	}
 	return saved, nil
 }
+
+// DeleteTripRate removes one trip-scoped exchange rate row (e.g. dropping a currency the trip no
+// longer uses). It only ever removes the exact direction given - SetTripRate is what keeps a pair
+// down to one direction, so callers should pass whichever direction ListForTrip returned.
+func (s *service) DeleteTripRate(ctx context.Context, _ identity.Identity, tc tripctx.TripContext, from, to string) error {
+	if err := tc.Trip.AssertMutable(); err != nil {
+		return err
+	}
+	if tc.Participant.Role != domainparticipant.RolePlanner {
+		return apperror.New("PLANNER_ONLY")
+	}
+	from, to = normalize(from), normalize(to)
+	if from == "" || to == "" {
+		return apperror.New("VALIDATION_FAILED")
+	}
+	return s.deps.Repo.DeleteTripPair(ctx, tc.Trip.ID, from, to)
+}
+
 func (s *service) ListForTrip(ctx context.Context, tc tripctx.TripContext) ([]domainfx.Rate, error) {
 	return s.deps.Repo.ListEffective(ctx, tc.Trip.ID)
 }
