@@ -9,6 +9,7 @@ import (
 	"github.com/jblabs/tripmate-be/pkg/tripctx"
 	shared "github.com/jblabs/tripmate-be/services/tripmate/v1/domain/shared"
 	domainexpense "github.com/jblabs/tripmate-be/services/tripmate/v1/entities/domain/expense"
+	domaincat "github.com/jblabs/tripmate-be/services/tripmate/v1/entities/domain/expense_category"
 	domainparticipant "github.com/jblabs/tripmate-be/services/tripmate/v1/entities/domain/participant"
 	"github.com/jblabs/tripmate-be/services/tripmate/v1/entities/event"
 )
@@ -48,6 +49,10 @@ type ReceiptLinker interface {
 	ClearExpenseLink(context.Context, uuid.UUID) error
 }
 
+type CategoryFinder interface {
+	GetByID(context.Context, uuid.UUID) (*domaincat.ExpenseCategory, error)
+}
+
 type Dependencies struct {
 	Expenses     Repository
 	Payers       PayerRepository
@@ -55,6 +60,7 @@ type Dependencies struct {
 	Participants ParticipantRepository
 	Outbox       OutboxRepository
 	Receipts     ReceiptLinker
+	Categories   CategoryFinder
 	UOW          shared.UnitOfWork
 	Clock        func() time.Time
 }

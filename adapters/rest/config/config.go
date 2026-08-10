@@ -15,6 +15,7 @@ type Config struct {
 	App      AppConfig
 	DB       DBConfig
 	JWT      JWTConfig
+	Google   GoogleConfig
 	CORS     CORSConfig
 	Storage  StorageConfig
 	OCR      OCRConfig
@@ -46,6 +47,12 @@ type JWTConfig struct {
 	RefreshSecret string        `envconfig:"JWT_REFRESH_SECRET"`
 	AccessTTL     time.Duration `envconfig:"JWT_ACCESS_TTL" default:"15m"`
 	RefreshTTL    time.Duration `envconfig:"JWT_REFRESH_TTL" default:"720h"`
+}
+
+type GoogleConfig struct {
+	// ClientID is the OAuth client ID the frontend requests Google ID tokens for; it doubles as
+	// the expected audience when this service verifies those tokens. Empty disables Google sign-in.
+	ClientID string `envconfig:"GOOGLE_CLIENT_ID"`
 }
 
 type CORSConfig struct {

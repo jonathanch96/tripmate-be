@@ -13,6 +13,7 @@ type Dependencies struct {
 	Hasher      Hasher
 	Issuer      TokenIssuer
 	Invitations InvitationFinder
+	Google      GoogleVerifier
 	Clock       func() time.Time
 }
 

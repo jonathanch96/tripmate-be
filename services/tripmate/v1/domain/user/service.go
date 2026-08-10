@@ -67,18 +67,64 @@ func (s *service) Authenticate(ctx context.Context, email, password string) (*Se
 	if err != nil && !missing {
 		return nil, err
 	}
+	// A Google-only account has no password hash at all; treat it exactly like a missing user so
+	// the failure looks identical (same dummy hash, same error) rather than a 500 from Verify("").
+	noPassword := found != nil && found.PasswordHash == ""
 	hash := dummyPasswordHash
-	if !missing && found != nil {
+	if !missing && !noPassword && found != nil {
 		hash = found.PasswordHash
 	}
 	verified, verifyErr := s.deps.Hasher.Verify(password, hash)
 	if verifyErr != nil && !missing {
 		return nil, apperror.Wrap(verifyErr, "INTERNAL_ERROR")
 	}
-	if missing || found == nil || !verified {
+	if missing || found == nil || noPassword || !verified {
 		return nil, apperror.New("INVALID_CREDENTIALS")
 	}
 	return s.issueSession(ctx, *found)
+}
+
+// AuthenticateGoogle trades a verified Google ID token for a session, using the exact same
+// issueSession path Authenticate uses so a Google-signed-in user gets an identical access/refresh
+// pair. It resolves the user by GoogleID first, then by email (auto-linking an existing
+// password account whose email matches - a Google-verified email is enough to trust the link),
+// and only creates a new, password-less account when neither is found.
+func (s *service) AuthenticateGoogle(ctx context.Context, idToken string) (*Session, error) {
+	if s.deps.Google == nil {
+		return nil, apperror.New("GOOGLE_TOKEN_INVALID")
+	}
+	claims, err := s.deps.Google.Verify(ctx, idToken)
+	if err != nil || !claims.EmailVerified {
+		return nil, apperror.New("GOOGLE_TOKEN_INVALID")
+	}
+	email := normalizeEmail(claims.Email)
+	found, err := s.deps.Repo.GetByGoogleID(ctx, claims.Subject)
+	if err == nil {
+		return s.issueSession(ctx, *found)
+	}
+	if !apperror.Is(err, "USER_NOT_FOUND") {
+		return nil, err
+	}
+	found, err = s.deps.Repo.GetByEmail(ctx, email)
+	if err == nil {
+		if setErr := s.deps.Repo.SetGoogleID(ctx, found.ID, claims.Subject); setErr != nil {
+			return nil, setErr
+		}
+		return s.issueSession(ctx, *found)
+	}
+	if !apperror.Is(err, "USER_NOT_FOUND") {
+		return nil, err
+	}
+	name := strings.TrimSpace(claims.Name)
+	if name == "" {
+		name = email
+	}
+	googleID := claims.Subject
+	created, err := s.deps.Repo.Create(ctx, &domainuser.User{ID: uuid.New(), Email: email, Name: name, GoogleID: &googleID})
+	if err != nil {
+		return nil, err
+	}
+	return s.issueSession(ctx, *created)
 }
 
 func (s *service) Refresh(ctx context.Context, raw string) (*Session, error) {

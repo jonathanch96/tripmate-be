@@ -22,11 +22,13 @@ type Split struct {
 	UserID uuid.UUID `json:"user_id"`
 	User   *User     `json:"user"`
 	Amount string    `json:"amount"`
+	Weight *string   `json:"weight"`
 }
 
 type Expense struct {
 	ID             uuid.UUID  `json:"id"`
 	TripID         uuid.UUID  `json:"trip_id"`
+	CategoryID     *uuid.UUID `json:"category_id"`
 	ExpenseDate    string     `json:"expense_date"`
 	Description    string     `json:"description"`
 	Amount         string     `json:"amount"`
@@ -51,7 +53,7 @@ type Expense struct {
 }
 
 func FromDomain(entity domainexpense.Expense, tc tripctx.TripContext, actorID uuid.UUID) Expense {
-	result := Expense{ID: entity.ID, TripID: entity.TripID, ExpenseDate: entity.ExpenseDate.Format("2006-01-02"),
+	result := Expense{ID: entity.ID, TripID: entity.TripID, CategoryID: entity.CategoryID, ExpenseDate: entity.ExpenseDate.Format("2006-01-02"),
 		Description: entity.Description, Amount: entity.Amount.StringFixedBank(displayScale(entity.Currency)), Currency: entity.Currency,
 		SplitType: string(entity.SplitType), Status: string(entity.Status), Source: string(entity.Source), Note: entity.Note,
 		ApprovedAt: entity.ApprovedAt, RejectedReason: entity.RejectedReason, Version: entity.Version,
@@ -79,6 +81,10 @@ func FromDomain(entity domainexpense.Expense, tc tripctx.TripContext, actorID uu
 	result.Splits = make([]Split, len(entity.Splits))
 	for i, row := range entity.Splits {
 		result.Splits[i] = Split{UserID: row.UserID, Amount: row.Amount.StringFixedBank(displayScale(entity.Currency))}
+		if row.Weight != nil {
+			weight := row.Weight.String()
+			result.Splits[i].Weight = &weight
+		}
 		if row.User != nil {
 			value := userresponse.FromDomain(*row.User)
 			result.Splits[i].User = &value

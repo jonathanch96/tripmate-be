@@ -43,6 +43,26 @@ func (f *fakeRepo) GetByEmail(_ context.Context, email string) (*domainuser.User
 func (f *fakeRepo) ExistsByEmail(_ context.Context, email string) (bool, error) {
 	return f.byEmail[email] != nil, nil
 }
+func (f *fakeRepo) GetByGoogleID(_ context.Context, googleID string) (*domainuser.User, error) {
+	for _, u := range f.byEmail {
+		if u.GoogleID != nil && *u.GoogleID == googleID {
+			copy := *u
+			return &copy, nil
+		}
+	}
+	return nil, apperror.New("USER_NOT_FOUND")
+}
+func (f *fakeRepo) SetGoogleID(_ context.Context, id uuid.UUID, googleID string) error {
+	for email, u := range f.byEmail {
+		if u.ID == id {
+			copy := *u
+			copy.GoogleID = &googleID
+			f.byEmail[email] = &copy
+			return nil
+		}
+	}
+	return apperror.New("USER_NOT_FOUND")
+}
 func (f *fakeRepo) Update(_ context.Context, u *domainuser.User) (*domainuser.User, error) {
 	copy := *u
 	f.byEmail[u.Email] = &copy
@@ -216,6 +236,76 @@ func TestRefreshReuseRevokesAllForUser(t *testing.T) {
 	}
 	if len(tokens.revokedAll) != 1 || tokens.revokedAll[0] != userID {
 		t.Fatalf("cascade = %+v", tokens.revokedAll)
+	}
+}
+
+type fakeGoogleVerifier struct {
+	claims *GoogleClaims
+	err    error
+}
+
+func (f *fakeGoogleVerifier) Verify(context.Context, string) (*GoogleClaims, error) {
+	return f.claims, f.err
+}
+
+func TestAuthenticateGoogleCreatesAPasswordlessAccountOnFirstSignIn(t *testing.T) {
+	service, repo, _, _ := fixture()
+	service.deps.Google = &fakeGoogleVerifier{claims: &GoogleClaims{Subject: "google-1", Email: "New@Example.com", EmailVerified: true, Name: "New Person"}}
+	session, err := service.AuthenticateGoogle(context.Background(), "raw-token")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if session.User.Email != "new@example.com" || session.User.PasswordHash != "" || session.User.GoogleID == nil || *session.User.GoogleID != "google-1" {
+		t.Fatalf("created user = %+v", session.User)
+	}
+	if repo.created == nil || repo.created.Name != "New Person" {
+		t.Fatalf("created = %+v", repo.created)
+	}
+}
+
+func TestAuthenticateGoogleLinksAnExistingPasswordAccountByEmail(t *testing.T) {
+	service, repo, _, _ := fixture()
+	repo.byEmail["existing@example.com"] = &domainuser.User{ID: uuid.New(), Email: "existing@example.com", Name: "Existing", PasswordHash: "hashed"}
+	service.deps.Google = &fakeGoogleVerifier{claims: &GoogleClaims{Subject: "google-2", Email: "existing@example.com", EmailVerified: true, Name: "Existing"}}
+	session, err := service.AuthenticateGoogle(context.Background(), "raw-token")
+	if err != nil {
+		t.Fatal(err)
+	}
+	linked := repo.byEmail["existing@example.com"]
+	if linked.GoogleID == nil || *linked.GoogleID != "google-2" {
+		t.Fatalf("linked account = %+v", linked)
+	}
+	if session.User.PasswordHash != "hashed" {
+		t.Fatalf("linking must not touch the existing password: %+v", session.User)
+	}
+}
+
+func TestAuthenticateGoogleRejectsAnUnverifiedEmail(t *testing.T) {
+	service, _, _, _ := fixture()
+	service.deps.Google = &fakeGoogleVerifier{claims: &GoogleClaims{Subject: "google-3", Email: "unverified@example.com", EmailVerified: false}}
+	if _, err := service.AuthenticateGoogle(context.Background(), "raw-token"); !apperror.Is(err, "GOOGLE_TOKEN_INVALID") {
+		t.Fatalf("unverified email error = %v", err)
+	}
+}
+
+func TestAuthenticateGoogleWithoutAVerifierConfiguredFailsClosed(t *testing.T) {
+	service, _, _, _ := fixture()
+	if _, err := service.AuthenticateGoogle(context.Background(), "raw-token"); !apperror.Is(err, "GOOGLE_TOKEN_INVALID") {
+		t.Fatalf("no verifier error = %v", err)
+	}
+}
+
+// A password login attempt against a Google-only account must fail like any other bad login, not
+// like a 500 - this guards the fix in Authenticate that treats an empty PasswordHash as "missing".
+func TestPasswordLoginAgainstAGoogleOnlyAccountIsInvalidCredentials(t *testing.T) {
+	service, repo, _, hasher := fixture()
+	googleID := "google-4"
+	repo.byEmail["googleonly@example.com"] = &domainuser.User{ID: uuid.New(), Email: "googleonly@example.com", Name: "Google Only", GoogleID: &googleID}
+	if _, err := service.Authenticate(context.Background(), "googleonly@example.com", "Password1"); !apperror.Is(err, "INVALID_CREDENTIALS") {
+		t.Fatalf("password login against google-only account error = %v", err)
+	}
+	if hasher.verifyCalls != 1 {
+		t.Fatalf("verify calls = %d, want 1 (dummy hash still compared for constant-time behavior)", hasher.verifyCalls)
 	}
 }
 

@@ -51,7 +51,7 @@ func tripContext(ctx *gin.Context) tripctx.TripContext {
 	return tripctx.MustFromContext(ctx.Request.Context())
 }
 
-func parseRows(payers []expenserequest.Payer, splits []expenserequest.Split, participants []string) ([]domainexpense.Payer, map[uuid.UUID]decimal.Decimal, []uuid.UUID, error) {
+func parseRows(payers []expenserequest.Payer, splits []expenserequest.Split, participants []string) ([]domainexpense.Payer, map[uuid.UUID]decimal.Decimal, map[uuid.UUID]decimal.Decimal, []uuid.UUID, error) {
 	var resultPayers []domainexpense.Payer
 	if payers != nil {
 		resultPayers = make([]domainexpense.Payer, len(payers))
@@ -59,31 +59,42 @@ func parseRows(payers []expenserequest.Payer, splits []expenserequest.Split, par
 	for i, row := range payers {
 		id, err := uuid.Parse(row.UserID)
 		if err != nil {
-			return nil, nil, nil, apperror.New("VALIDATION_FAILED")
+			return nil, nil, nil, nil, apperror.New("VALIDATION_FAILED")
 		}
 		amount, err := decimal.NewFromString(row.Amount)
 		if err != nil {
-			return nil, nil, nil, apperror.New("VALIDATION_FAILED")
+			return nil, nil, nil, nil, apperror.New("VALIDATION_FAILED")
 		}
 		resultPayers[i] = domainexpense.Payer{UserID: id, Amount: amount}
 	}
 	var manual map[uuid.UUID]decimal.Decimal
+	var weights map[uuid.UUID]decimal.Decimal
 	if splits != nil {
 		manual = make(map[uuid.UUID]decimal.Decimal, len(splits))
 	}
 	for _, row := range splits {
 		id, err := uuid.Parse(row.UserID)
 		if err != nil {
-			return nil, nil, nil, apperror.New("VALIDATION_FAILED")
+			return nil, nil, nil, nil, apperror.New("VALIDATION_FAILED")
 		}
 		amount, err := decimal.NewFromString(row.Amount)
 		if err != nil {
-			return nil, nil, nil, apperror.New("VALIDATION_FAILED")
+			return nil, nil, nil, nil, apperror.New("VALIDATION_FAILED")
 		}
 		if _, duplicate := manual[id]; duplicate {
-			return nil, nil, nil, apperror.New("VALIDATION_FAILED")
+			return nil, nil, nil, nil, apperror.New("VALIDATION_FAILED")
 		}
 		manual[id] = amount
+		if row.Weight != nil {
+			weight, err := decimal.NewFromString(*row.Weight)
+			if err != nil {
+				return nil, nil, nil, nil, apperror.New("VALIDATION_FAILED")
+			}
+			if weights == nil {
+				weights = make(map[uuid.UUID]decimal.Decimal, len(splits))
+			}
+			weights[id] = weight
+		}
 	}
 	var ids []uuid.UUID
 	if participants != nil {
@@ -92,11 +103,29 @@ func parseRows(payers []expenserequest.Payer, splits []expenserequest.Split, par
 	for i, raw := range participants {
 		id, err := uuid.Parse(raw)
 		if err != nil {
-			return nil, nil, nil, apperror.New("VALIDATION_FAILED")
+			return nil, nil, nil, nil, apperror.New("VALIDATION_FAILED")
 		}
 		ids[i] = id
 	}
-	return resultPayers, manual, ids, nil
+	return resultPayers, manual, weights, ids, nil
+}
+
+// parseCategoryID follows the create/update convention of "omitted -> unchanged": nil means the
+// caller didn't send category_id at all. An explicit empty string is the sentinel for "clear the
+// category", represented downstream as a pointer to uuid.Nil.
+func parseCategoryID(raw *string) (*uuid.UUID, error) {
+	if raw == nil {
+		return nil, nil
+	}
+	if *raw == "" {
+		nilID := uuid.Nil
+		return &nilID, nil
+	}
+	id, err := uuid.Parse(*raw)
+	if err != nil {
+		return nil, apperror.New("VALIDATION_FAILED")
+	}
+	return &id, nil
 }
 
 func parseID(ctx *gin.Context) (uuid.UUID, bool) {
@@ -133,13 +162,22 @@ func (c *controller) create(ctx *gin.Context) {
 		response.Error(ctx, apperror.New("VALIDATION_FAILED"))
 		return
 	}
-	payers, manual, participants, err := parseRows(req.Payers, req.Splits, req.Participants)
+	payers, manual, weights, participants, err := parseRows(req.Payers, req.Splits, req.Participants)
 	if err != nil {
 		response.Error(ctx, err)
 		return
 	}
+	categoryID, err := parseCategoryID(req.CategoryID)
+	if err != nil {
+		response.Error(ctx, err)
+		return
+	}
+	if categoryID != nil && *categoryID == uuid.Nil {
+		// A new expense with no category sent is simply uncategorized - there is nothing to "clear".
+		categoryID = nil
+	}
 	tc := tripContext(ctx)
-	entity, err := c.expenses.Create(ctx, actor(ctx), tc, expensedomain.CreateInput{ExpenseDate: date, Description: req.Description, Amount: amount, Currency: req.Currency, SplitType: domainexpense.SplitType(req.SplitType), Payers: payers, Participants: participants, Manual: manual, Note: req.Note})
+	entity, err := c.expenses.Create(ctx, actor(ctx), tc, expensedomain.CreateInput{ExpenseDate: date, Description: req.Description, Amount: amount, Currency: req.Currency, CategoryID: categoryID, SplitType: domainexpense.SplitType(req.SplitType), Payers: payers, Participants: participants, Manual: manual, Weights: weights, Note: req.Note})
 	if err != nil {
 		response.Error(ctx, err)
 		return
@@ -190,12 +228,17 @@ func (c *controller) update(ctx *gin.Context) {
 	if !bind(ctx, &req) {
 		return
 	}
-	payers, manual, participants, err := parseRows(req.Payers, req.Splits, req.Participants)
+	payers, manual, weights, participants, err := parseRows(req.Payers, req.Splits, req.Participants)
 	if err != nil {
 		response.Error(ctx, err)
 		return
 	}
-	input := expensedomain.UpdateInput{Description: req.Description, Currency: req.Currency, Payers: payers, Participants: participants, Manual: manual, Note: req.Note, Version: req.Version}
+	categoryID, err := parseCategoryID(req.CategoryID)
+	if err != nil {
+		response.Error(ctx, err)
+		return
+	}
+	input := expensedomain.UpdateInput{Description: req.Description, Currency: req.Currency, CategoryID: categoryID, Payers: payers, Participants: participants, Manual: manual, Weights: weights, Note: req.Note, Version: req.Version}
 	if req.ExpenseDate != nil {
 		value, parseErr := time.Parse("2006-01-02", *req.ExpenseDate)
 		if parseErr != nil {

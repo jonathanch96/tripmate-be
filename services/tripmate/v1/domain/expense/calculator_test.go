@@ -56,6 +56,14 @@ func TestCalculateSplitsRequiredTable(t *testing.T) {
 		{name: "item rejects a stated total that does not match the bill", input: SplitInput{Amount: amount("999"), Currency: "PHP", SplitType: domainexpense.SplitItem, Items: []ItemAssignment{
 			{Amount: amount("100"), UserIDs: []uuid.UUID{participants[0]}},
 		}}, errorCode: "SPLIT_SUM_MISMATCH"},
+		{name: "percent valid", input: SplitInput{Amount: amount("100"), Currency: "PHP", SplitType: domainexpense.SplitPercent, Weights: map[uuid.UUID]decimal.Decimal{participants[0]: amount("60"), participants[1]: amount("40")}}, want: []string{"60", "40"}},
+		{name: "percent uneven split follows uuid order", input: SplitInput{Amount: amount("100"), Currency: "PHP", SplitType: domainexpense.SplitPercent, Weights: map[uuid.UUID]decimal.Decimal{participants[0]: amount("33.34"), participants[1]: amount("33.33"), participants[2]: amount("33.33")}}, want: []string{"33.34", "33.33", "33.33"}},
+		{name: "percent must sum to 100", input: SplitInput{Amount: amount("100"), Currency: "PHP", SplitType: domainexpense.SplitPercent, Weights: map[uuid.UUID]decimal.Decimal{participants[0]: amount("60"), participants[1]: amount("30")}}, errorCode: "SPLIT_PERCENT_MISMATCH"},
+		{name: "percent rejects a zero weight", input: SplitInput{Amount: amount("100"), Currency: "PHP", SplitType: domainexpense.SplitPercent, Weights: map[uuid.UUID]decimal.Decimal{participants[0]: amount("100"), participants[1]: decimal.Zero}}, errorCode: "VALIDATION_FAILED"},
+		{name: "percent requires weights", input: SplitInput{Amount: amount("100"), Currency: "PHP", SplitType: domainexpense.SplitPercent}, errorCode: "VALIDATION_FAILED"},
+		{name: "shares valid uneven ratio", input: SplitInput{Amount: amount("100"), Currency: "PHP", SplitType: domainexpense.SplitShares, Weights: map[uuid.UUID]decimal.Decimal{participants[0]: amount("2"), participants[1]: amount("1")}}, want: []string{"66.67", "33.33"}},
+		{name: "shares need not sum to any fixed total", input: SplitInput{Amount: amount("90"), Currency: "PHP", SplitType: domainexpense.SplitShares, Weights: map[uuid.UUID]decimal.Decimal{participants[0]: amount("1"), participants[1]: amount("1"), participants[2]: amount("1")}}, want: []string{"30", "30", "30"}},
+		{name: "shares rejects a negative share", input: SplitInput{Amount: amount("100"), Currency: "PHP", SplitType: domainexpense.SplitShares, Weights: map[uuid.UUID]decimal.Decimal{participants[0]: amount("-1"), participants[1]: amount("2")}}, errorCode: "VALIDATION_FAILED"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -95,6 +103,23 @@ func TestValidatePayersRequiredTable(t *testing.T) {
 	}
 	if err := ValidatePayers(amount("12000"), "PHP", []domainexpense.Payer{{UserID: first, Amount: amount("6000")}, {UserID: first, Amount: amount("6000")}}); !apperror.Is(err, "VALIDATION_FAILED") {
 		t.Fatalf("duplicate = %v", err)
+	}
+}
+
+func TestPercentAndSharesSplitsCarryTheirWeight(t *testing.T) {
+	first, second := participant(1), participant(2)
+	splits, err := CalculateSplits(SplitInput{Amount: amount("100"), Currency: "PHP", SplitType: domainexpense.SplitPercent,
+		Weights: map[uuid.UUID]decimal.Decimal{first: amount("70"), second: amount("30")}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, split := range splits {
+		if split.Weight == nil {
+			t.Fatalf("split for %s has no weight", split.UserID)
+		}
+	}
+	if !splits[0].Weight.Equal(amount("70")) || !splits[1].Weight.Equal(amount("30")) {
+		t.Fatalf("weights = %s, %s", splits[0].Weight, splits[1].Weight)
 	}
 }
 

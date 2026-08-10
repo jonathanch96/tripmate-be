@@ -44,6 +44,15 @@ func (a *adapterGormPostgresql) GetByEmail(ctx context.Context, email string) (*
 	return &result, nil
 }
 
+func (a *adapterGormPostgresql) GetByGoogleID(ctx context.Context, googleID string) (*domainuser.User, error) {
+	var model User
+	if err := a.db.WithContext(ctx).First(&model, "google_id = ?", googleID).Error; err != nil {
+		return nil, translate(err)
+	}
+	result := toDomain(model)
+	return &result, nil
+}
+
 func (a *adapterGormPostgresql) ExistsByEmail(ctx context.Context, email string) (bool, error) {
 	var count int64
 	if err := a.db.WithContext(ctx).Model(&User{}).Where("email = ?", email).Count(&count).Error; err != nil {
@@ -62,6 +71,19 @@ func (a *adapterGormPostgresql) Update(ctx context.Context, entity *domainuser.U
 		return nil, apperror.New("USER_NOT_FOUND")
 	}
 	return a.GetByID(ctx, entity.ID)
+}
+
+// SetGoogleID links an existing (password-based) account to a Google identity the first time its
+// owner signs in with Google, so future Google sign-ins resolve straight to this user by GoogleID.
+func (a *adapterGormPostgresql) SetGoogleID(ctx context.Context, id uuid.UUID, googleID string) error {
+	result := a.db.WithContext(ctx).Model(&User{}).Where("id = ?", id).Update("google_id", googleID)
+	if result.Error != nil {
+		return translate(result.Error)
+	}
+	if result.RowsAffected == 0 {
+		return apperror.New("USER_NOT_FOUND")
+	}
+	return nil
 }
 
 func (a *adapterGormPostgresql) ListByIDs(ctx context.Context, ids []uuid.UUID) ([]domainuser.User, error) {
