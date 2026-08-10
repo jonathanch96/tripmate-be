@@ -41,6 +41,7 @@ func (c *controller) RegisterRoutes(group *gin.RouterGroup) {
 	planner.POST("/settlements/:id/reject", c.reject)
 	planner.DELETE("/settlements/:id", c.delete)
 	planner.PUT("/exchange-rates", c.rateSet)
+	planner.DELETE("/exchange-rates", c.rateDelete)
 	planner.POST("/finalize", c.finalize)
 	planner.POST("/unfinalize", c.unfinalize)
 	// Global rates are not scoped to a trip, so they are registered outside the trip group.
@@ -309,6 +310,30 @@ func (c *controller) rateSet(ctx *gin.Context) {
 		return
 	}
 	response.OK(ctx, "RATE_SET", fxresponse.FromDomain(*row))
+}
+
+// rateDelete godoc
+// @Summary Delete a trip exchange rate
+// @Tags finance
+// @Security BearerAuth
+// @Param code path string true "Trip code"
+// @Param from query string true "From currency"
+// @Param to query string true "To currency"
+// @Success 200 {object} response.Envelope
+// @Failure 400 {object} response.Envelope
+// @Failure 403 {object} response.Envelope
+// @Router /trips/{code}/exchange-rates [delete]
+func (c *controller) rateDelete(ctx *gin.Context) {
+	from, to := ctx.Query("from"), ctx.Query("to")
+	if from == "" || to == "" {
+		response.Error(ctx, apperror.New("VALIDATION_FAILED"))
+		return
+	}
+	if err := c.fx.DeleteTripRate(ctx, actor(ctx), tripContext(ctx), from, to); err != nil {
+		response.Error(ctx, err)
+		return
+	}
+	response.NoData(ctx, "RATE_DELETED")
 }
 
 // ratesTrip godoc

@@ -164,9 +164,11 @@ func (f *fakeSettlements) Delete(context.Context, identity.Identity, tripctx.Tri
 }
 
 type fakeFX struct {
-	err      error
-	sets     int
-	lastRate fxdomain.SetRateInput
+	err        error
+	sets       int
+	lastRate   fxdomain.SetRateInput
+	deletes    int
+	lastDelete [2]string
 }
 
 func (f *fakeFX) EffectiveTable(context.Context, uuid.UUID) (*fxdomain.RateTable, error) {
@@ -179,6 +181,11 @@ func (f *fakeFX) SetTripRate(_ context.Context, _ identity.Identity, _ tripctx.T
 		return nil, f.err
 	}
 	return &domainfx.Rate{ID: uuid.New(), TripID: &tripID, FromCurrency: "USD", ToCurrency: "PHP", Rate: decimal.NewFromInt(50), IsFinal: true, Source: domainfx.SourceManual}, nil
+}
+func (f *fakeFX) DeleteTripRate(_ context.Context, _ identity.Identity, _ tripctx.TripContext, from, to string) error {
+	f.deletes++
+	f.lastDelete = [2]string{from, to}
+	return f.err
 }
 func (f *fakeFX) ListForTrip(context.Context, tripctx.TripContext) ([]domainfx.Rate, error) {
 	if f.err != nil {
@@ -564,6 +571,30 @@ func TestSetRatePassesTheParsedRateToTheDomain(t *testing.T) {
 	}
 	if h.fx.sets != 0 {
 		t.Fatal("an unparseable rate reached the domain")
+	}
+}
+
+func TestDeleteRateRequiresBothCurrenciesAndReachesTheDomain(t *testing.T) {
+	h := newHarness(domainparticipant.RolePlanner)
+	if recorder := h.do(http.MethodDelete, "/api/v1/trips/ABC123/exchange-rates?from=USD&to=PHP", ""); recorder.Code != http.StatusOK {
+		t.Fatalf("response = %d body = %s", recorder.Code, recorder.Body)
+	}
+	if h.fx.deletes != 1 || h.fx.lastDelete != [2]string{"USD", "PHP"} {
+		t.Fatalf("delete input = %+v", h.fx.lastDelete)
+	}
+	h = newHarness(domainparticipant.RolePlanner)
+	if recorder := h.do(http.MethodDelete, "/api/v1/trips/ABC123/exchange-rates", ""); recorder.Code != http.StatusBadRequest {
+		t.Fatalf("response = %d, want 400", recorder.Code)
+	}
+	if h.fx.deletes != 0 {
+		t.Fatal("a request missing from/to reached the domain")
+	}
+}
+
+func TestDeleteRateIsPlannerOnly(t *testing.T) {
+	h := newHarness(domainparticipant.RoleParticipant)
+	if recorder := h.do(http.MethodDelete, "/api/v1/trips/ABC123/exchange-rates?from=USD&to=PHP", ""); recorder.Code != http.StatusForbidden {
+		t.Fatalf("response = %d, want 403", recorder.Code)
 	}
 }
 

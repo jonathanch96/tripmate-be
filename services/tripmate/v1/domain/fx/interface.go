@@ -26,6 +26,7 @@ type Dependencies struct {
 type Service interface {
 	EffectiveTable(context.Context, uuid.UUID) (*RateTable, error)
 	SetTripRate(context.Context, identity.Identity, tripctx.TripContext, SetRateInput) (*domainfx.Rate, error)
+	DeleteTripRate(context.Context, identity.Identity, tripctx.TripContext, string, string) error
 	ListForTrip(context.Context, tripctx.TripContext) ([]domainfx.Rate, error)
 	LockAll(context.Context, uuid.UUID) error
 	ListGlobal(context.Context) ([]domainfx.Rate, error)
