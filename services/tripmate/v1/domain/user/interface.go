@@ -19,6 +19,13 @@ type Service interface {
 	GetByID(context.Context, uuid.UUID) (*domainuser.User, error)
 	UpdateProfile(context.Context, uuid.UUID, UpdateProfileInput) (*domainuser.User, error)
 	FindByEmail(context.Context, string) (*domainuser.User, error)
+	// CreatePlaceholder creates an account-less user (no password, no Google link) for an email
+	// that was invited to a trip before anyone with that email had signed up. It lets the invited
+	// person be assigned as an expense payer/split participant right away; Register or
+	// AuthenticateGoogle later claims the same row in place so every reference to its user ID
+	// keeps working. If the email is claimed by someone else in the meantime, the existing row
+	// wins rather than erroring.
+	CreatePlaceholder(ctx context.Context, email, name string) (*domainuser.User, error)
 }
 
 type Repository interface {
@@ -28,6 +35,9 @@ type Repository interface {
 	GetByGoogleID(context.Context, string) (*domainuser.User, error)
 	ExistsByEmail(context.Context, string) (bool, error)
 	SetGoogleID(context.Context, uuid.UUID, string) error
+	// SetPasswordHash gives a password-less account (Google-only, or a placeholder created by an
+	// invite) a password, without touching its other fields.
+	SetPasswordHash(context.Context, uuid.UUID, string) error
 	Update(context.Context, *domainuser.User) (*domainuser.User, error)
 	ListByIDs(context.Context, []uuid.UUID) ([]domainuser.User, error)
 }

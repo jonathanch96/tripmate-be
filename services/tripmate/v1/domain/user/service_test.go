@@ -18,6 +18,9 @@ type fakeRepo struct {
 }
 
 func (f *fakeRepo) Create(_ context.Context, u *domainuser.User) (*domainuser.User, error) {
+	if f.byEmail[u.Email] != nil {
+		return nil, apperror.New("EMAIL_ALREADY_REGISTERED")
+	}
 	copy := *u
 	f.created = &copy
 	f.byEmail[u.Email] = &copy
@@ -63,10 +66,29 @@ func (f *fakeRepo) SetGoogleID(_ context.Context, id uuid.UUID, googleID string)
 	}
 	return apperror.New("USER_NOT_FOUND")
 }
+func (f *fakeRepo) SetPasswordHash(_ context.Context, id uuid.UUID, hash string) error {
+	for email, u := range f.byEmail {
+		if u.ID == id {
+			copy := *u
+			copy.PasswordHash = hash
+			f.byEmail[email] = &copy
+			return nil
+		}
+	}
+	return apperror.New("USER_NOT_FOUND")
+}
+// Update mirrors the real adapter: it only ever touches name/avatar_url, so a caller can't
+// accidentally clobber password_hash/google_id by passing a stale copy of the row.
 func (f *fakeRepo) Update(_ context.Context, u *domainuser.User) (*domainuser.User, error) {
-	copy := *u
-	f.byEmail[u.Email] = &copy
-	return &copy, nil
+	for email, existing := range f.byEmail {
+		if existing.ID == u.ID {
+			copy := *existing
+			copy.Name, copy.AvatarURL = u.Name, u.AvatarURL
+			f.byEmail[email] = &copy
+			return &copy, nil
+		}
+	}
+	return nil, apperror.New("USER_NOT_FOUND")
 }
 func (f *fakeRepo) ListByIDs(context.Context, []uuid.UUID) ([]domainuser.User, error) {
 	return nil, nil
@@ -173,12 +195,58 @@ func TestRegisterSurfacesPendingInvitationsWithoutAcceptingThem(t *testing.T) {
 
 func TestRegisterRejectsDuplicateAndWeakPassword(t *testing.T) {
 	service, repo, _, _ := fixture()
-	repo.byEmail["used@example.com"] = &domainuser.User{ID: uuid.New(), Email: "used@example.com"}
+	repo.byEmail["used@example.com"] = &domainuser.User{ID: uuid.New(), Email: "used@example.com", PasswordHash: "hashed"}
 	if _, err := service.Register(context.Background(), RegisterInput{Email: "used@example.com", Name: "A", Password: "Password1"}); !apperror.Is(err, "EMAIL_ALREADY_REGISTERED") {
 		t.Fatalf("duplicate = %v", err)
 	}
 	if _, err := service.Register(context.Background(), RegisterInput{Email: "new@example.com", Name: "A", Password: "letters"}); !apperror.Is(err, "VALIDATION_FAILED") {
 		t.Fatalf("weak = %v", err)
+	}
+}
+
+// A placeholder account (created via CreatePlaceholder when someone was invited to a trip before
+// signing up) has no password and no Google link. Registering with that email must claim the
+// same row in place - not reject it, and not create a second row - so every trip_participants /
+// expense_payers reference by that user ID keeps resolving to the same person.
+func TestRegisterClaimsAPlaceholderAccountInPlaceOfCreatingANewOne(t *testing.T) {
+	service, repo, _, _ := fixture()
+	placeholder, err := service.CreatePlaceholder(context.Background(), "Invitee@Example.com", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if placeholder.PasswordHash != "" || placeholder.Name != "invitee@example.com" {
+		t.Fatalf("placeholder = %+v", placeholder)
+	}
+
+	session, err := service.Register(context.Background(), RegisterInput{Email: "invitee@example.com", Name: "Real Name", Password: "Password1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if session.User.ID != placeholder.ID {
+		t.Fatalf("claimed a different user id: got %s, want %s", session.User.ID, placeholder.ID)
+	}
+	stored := repo.byEmail["invitee@example.com"]
+	if stored.ID != placeholder.ID || stored.PasswordHash != "hashed" || stored.Name != "Real Name" {
+		t.Fatalf("stored after claim = %+v", stored)
+	}
+
+	// The password is live immediately - claiming isn't a separate step from registering.
+	if _, err := service.Authenticate(context.Background(), "invitee@example.com", "Password1"); err != nil {
+		t.Fatalf("authenticate after claim: %v", err)
+	}
+}
+
+func TestCreatePlaceholderReturnsTheExistingRowOnARaceInsteadOfErroring(t *testing.T) {
+	service, repo, _, _ := fixture()
+	real := &domainuser.User{ID: uuid.New(), Email: "raced@example.com", Name: "Real", PasswordHash: "hashed"}
+	repo.byEmail["raced@example.com"] = real
+
+	placeholder, err := service.CreatePlaceholder(context.Background(), "raced@example.com", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if placeholder.ID != real.ID {
+		t.Fatalf("CreatePlaceholder should have returned the real account, got %+v", placeholder)
 	}
 }
 
