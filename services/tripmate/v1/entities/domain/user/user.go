@@ -25,19 +25,14 @@ type PublicUser struct {
 	Email     string
 	Name      string
 	AvatarURL *string
-	// HasAccount is false for a placeholder created by inviting an email that had no account yet
-	// - they're a real trip participant (can be assigned expenses, etc.) but haven't registered
-	// or signed in with Google, so they can't sign in themselves until they do.
-	HasAccount bool
-	CreatedAt  time.Time
-	UpdatedAt  time.Time
+	CreatedAt time.Time
+	UpdatedAt time.Time
 }
 
 func (u User) Public() PublicUser {
 	return PublicUser{
 		ID: u.ID, Email: u.Email, Name: u.Name, AvatarURL: u.AvatarURL,
-		HasAccount: u.PasswordHash != "" || u.GoogleID != nil,
-		CreatedAt:  u.CreatedAt, UpdatedAt: u.UpdatedAt,
+		CreatedAt: u.CreatedAt, UpdatedAt: u.UpdatedAt,
 	}
 }
 

@@ -29,33 +29,21 @@ func (s *service) Register(ctx context.Context, input RegisterInput) (*Session, 
 	if fields := validatePassword(input.Password); len(fields) > 0 {
 		return nil, apperror.WithFields("VALIDATION_FAILED", fields)
 	}
+	exists, err := s.deps.Repo.ExistsByEmail(ctx, email)
+	if err != nil {
+		return nil, err
+	}
+	if exists {
+		return nil, apperror.New("EMAIL_ALREADY_REGISTERED")
+	}
 	passwordHash, err := s.deps.Hasher.Hash(input.Password)
 	if err != nil {
 		return nil, apperror.Wrap(err, "INTERNAL_ERROR")
 	}
-	name := strings.TrimSpace(input.Name)
-	existing, err := s.deps.Repo.GetByEmail(ctx, email)
-	var created *domainuser.User
-	switch {
-	case err == nil && (existing.PasswordHash != "" || existing.GoogleID != nil):
-		return nil, apperror.New("EMAIL_ALREADY_REGISTERED")
-	case err == nil:
-		// A placeholder account (created when this email was invited to a trip before signing
-		// up) has no password and no Google link yet - registering claims it in place, so every
-		// participant/expense-payer reference by this user ID keeps working.
-		if err := s.deps.Repo.SetPasswordHash(ctx, existing.ID, passwordHash); err != nil {
-			return nil, err
-		}
-		existing.Name = name
-		if created, err = s.deps.Repo.Update(ctx, existing); err != nil {
-			return nil, err
-		}
-	case apperror.Is(err, "USER_NOT_FOUND"):
-		created, err = s.deps.Repo.Create(ctx, &domainuser.User{ID: uuid.New(), Email: email, Name: name, PasswordHash: passwordHash})
-		if err != nil {
-			return nil, err
-		}
-	default:
+	created, err := s.deps.Repo.Create(ctx, &domainuser.User{
+		ID: uuid.New(), Email: email, Name: strings.TrimSpace(input.Name), PasswordHash: passwordHash,
+	})
+	if err != nil {
 		return nil, err
 	}
 	session, err := s.issueSession(ctx, *created)
@@ -204,16 +192,23 @@ func (s *service) FindByEmail(ctx context.Context, email string) (*domainuser.Us
 	return s.deps.Repo.GetByEmail(ctx, normalizeEmail(email))
 }
 
-func (s *service) CreatePlaceholder(ctx context.Context, email, name string) (*domainuser.User, error) {
+func (s *service) CreateMember(ctx context.Context, email, name, password string) (*domainuser.User, error) {
 	email = normalizeEmail(email)
 	name = strings.TrimSpace(name)
 	if name == "" {
 		name = email
 	}
-	created, err := s.deps.Repo.Create(ctx, &domainuser.User{ID: uuid.New(), Email: email, Name: name})
+	if fields := validatePassword(password); len(fields) > 0 {
+		return nil, apperror.WithFields("VALIDATION_FAILED", fields)
+	}
+	passwordHash, err := s.deps.Hasher.Hash(password)
+	if err != nil {
+		return nil, apperror.Wrap(err, "INTERNAL_ERROR")
+	}
+	created, err := s.deps.Repo.Create(ctx, &domainuser.User{ID: uuid.New(), Email: email, Name: name, PasswordHash: passwordHash})
 	if err != nil {
 		if apperror.Is(err, "EMAIL_ALREADY_REGISTERED") {
-			// Lost a race with someone else claiming or creating this email - use their row.
+			// Lost a race with someone else creating this email's account - use their row.
 			return s.deps.Repo.GetByEmail(ctx, email)
 		}
 		return nil, err

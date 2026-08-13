@@ -66,17 +66,6 @@ func (f *fakeRepo) SetGoogleID(_ context.Context, id uuid.UUID, googleID string)
 	}
 	return apperror.New("USER_NOT_FOUND")
 }
-func (f *fakeRepo) SetPasswordHash(_ context.Context, id uuid.UUID, hash string) error {
-	for email, u := range f.byEmail {
-		if u.ID == id {
-			copy := *u
-			copy.PasswordHash = hash
-			f.byEmail[email] = &copy
-			return nil
-		}
-	}
-	return apperror.New("USER_NOT_FOUND")
-}
 // Update mirrors the real adapter: it only ever touches name/avatar_url, so a caller can't
 // accidentally clobber password_hash/google_id by passing a stale copy of the row.
 func (f *fakeRepo) Update(_ context.Context, u *domainuser.User) (*domainuser.User, error) {
@@ -204,49 +193,53 @@ func TestRegisterRejectsDuplicateAndWeakPassword(t *testing.T) {
 	}
 }
 
-// A placeholder account (created via CreatePlaceholder when someone was invited to a trip before
-// signing up) has no password and no Google link. Registering with that email must claim the
-// same row in place - not reject it, and not create a second row - so every trip_participants /
-// expense_payers reference by that user ID keeps resolving to the same person.
-func TestRegisterClaimsAPlaceholderAccountInPlaceOfCreatingANewOne(t *testing.T) {
+// Register must never be able to attach a password to somebody else's existing account just
+// because the caller knows their email - including a Google-only account with no password yet.
+// Letting an unauthenticated Register call "claim" it would be an account takeover.
+func TestRegisterRejectsAnEmailThatAlreadyHasAGoogleOnlyAccount(t *testing.T) {
 	service, repo, _, _ := fixture()
-	placeholder, err := service.CreatePlaceholder(context.Background(), "Invitee@Example.com", "")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if placeholder.PasswordHash != "" || placeholder.Name != "invitee@example.com" {
-		t.Fatalf("placeholder = %+v", placeholder)
-	}
+	googleID := "google-subject-1"
+	repo.byEmail["invitee@example.com"] = &domainuser.User{ID: uuid.New(), Email: "invitee@example.com", Name: "Invitee", GoogleID: &googleID}
 
-	session, err := service.Register(context.Background(), RegisterInput{Email: "invitee@example.com", Name: "Real Name", Password: "Password1"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if session.User.ID != placeholder.ID {
-		t.Fatalf("claimed a different user id: got %s, want %s", session.User.ID, placeholder.ID)
-	}
-	stored := repo.byEmail["invitee@example.com"]
-	if stored.ID != placeholder.ID || stored.PasswordHash != "hashed" || stored.Name != "Real Name" {
-		t.Fatalf("stored after claim = %+v", stored)
-	}
-
-	// The password is live immediately - claiming isn't a separate step from registering.
-	if _, err := service.Authenticate(context.Background(), "invitee@example.com", "Password1"); err != nil {
-		t.Fatalf("authenticate after claim: %v", err)
+	if _, err := service.Register(context.Background(), RegisterInput{Email: "invitee@example.com", Name: "Real Name", Password: "Password1"}); !apperror.Is(err, "EMAIL_ALREADY_REGISTERED") {
+		t.Fatalf("Register() against a Google-only account = %v, want EMAIL_ALREADY_REGISTERED", err)
 	}
 }
 
-func TestCreatePlaceholderReturnsTheExistingRowOnARaceInsteadOfErroring(t *testing.T) {
+// CreateMember is how a trip owner adds someone directly: a full account, with the password they
+// set, right away - never a password-less placeholder.
+func TestCreateMemberSetsThePasswordTheOwnerChoseAndTheyCanSignInImmediately(t *testing.T) {
+	service, _, _, _ := fixture()
+	member, err := service.CreateMember(context.Background(), "Invitee@Example.com", "", "Password1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if member.PasswordHash != "hashed" || member.Name != "invitee@example.com" {
+		t.Fatalf("member = %+v", member)
+	}
+	if _, err := service.Authenticate(context.Background(), "invitee@example.com", "Password1"); err != nil {
+		t.Fatalf("authenticate as new member: %v", err)
+	}
+}
+
+func TestCreateMemberRejectsAWeakPassword(t *testing.T) {
+	service, _, _, _ := fixture()
+	if _, err := service.CreateMember(context.Background(), "invitee@example.com", "Name", "weak"); !apperror.Is(err, "VALIDATION_FAILED") {
+		t.Fatalf("weak password = %v", err)
+	}
+}
+
+func TestCreateMemberReturnsTheExistingRowOnARaceInsteadOfErroring(t *testing.T) {
 	service, repo, _, _ := fixture()
 	real := &domainuser.User{ID: uuid.New(), Email: "raced@example.com", Name: "Real", PasswordHash: "hashed"}
 	repo.byEmail["raced@example.com"] = real
 
-	placeholder, err := service.CreatePlaceholder(context.Background(), "raced@example.com", "")
+	member, err := service.CreateMember(context.Background(), "raced@example.com", "", "Password1")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if placeholder.ID != real.ID {
-		t.Fatalf("CreatePlaceholder should have returned the real account, got %+v", placeholder)
+	if member.ID != real.ID {
+		t.Fatalf("CreateMember should have returned the real account, got %+v", member)
 	}
 }
 

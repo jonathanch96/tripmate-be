@@ -17,10 +17,10 @@ type Invitation struct {
 	ExpiresAt time.Time `json:"expires_at"`
 }
 
+// Status is "added" (an existing account was attached to the trip directly) or "created" (a new
+// account was created for them, with the password the trip owner set). There is no pending state.
 type InviteResult struct {
 	Status      string                           `json:"status"`
-	Invitation  *Invitation                      `json:"invitation,omitempty"`
-	InviteLink  string                           `json:"invite_link,omitempty"`
 	Participant *participantresponse.Participant `json:"participant,omitempty"`
 }
 

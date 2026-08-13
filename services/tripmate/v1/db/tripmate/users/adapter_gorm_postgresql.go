@@ -86,19 +86,6 @@ func (a *adapterGormPostgresql) SetGoogleID(ctx context.Context, id uuid.UUID, g
 	return nil
 }
 
-// SetPasswordHash gives a password-less account (Google-only, or an invite placeholder) a
-// password without touching its other fields.
-func (a *adapterGormPostgresql) SetPasswordHash(ctx context.Context, id uuid.UUID, hash string) error {
-	result := a.db.WithContext(ctx).Model(&User{}).Where("id = ?", id).Update("password_hash", hash)
-	if result.Error != nil {
-		return translate(result.Error)
-	}
-	if result.RowsAffected == 0 {
-		return apperror.New("USER_NOT_FOUND")
-	}
-	return nil
-}
-
 func (a *adapterGormPostgresql) ListByIDs(ctx context.Context, ids []uuid.UUID) ([]domainuser.User, error) {
 	if len(ids) == 0 {
 		return []domainuser.User{}, nil

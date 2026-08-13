@@ -8,11 +8,10 @@ import (
 )
 
 type User struct {
-	ID         uuid.UUID `json:"id"`
-	Name       string    `json:"name"`
-	Email      string    `json:"email"`
-	AvatarURL  *string   `json:"avatar_url"`
-	HasAccount bool      `json:"has_account"`
+	ID        uuid.UUID `json:"id"`
+	Name      string    `json:"name"`
+	Email     string    `json:"email"`
+	AvatarURL *string   `json:"avatar_url"`
 }
 
 type BankInfo struct {
@@ -40,7 +39,7 @@ func FromDomain(entity domainparticipant.Participant) Participant {
 		result.BankInfo = &BankInfo{BankName: entity.BankInfo.BankName, AccountNumber: entity.BankInfo.AccountNumber, AccountHolder: entity.BankInfo.AccountHolder}
 	}
 	if entity.User != nil {
-		result.User = &User{ID: entity.User.ID, Name: entity.User.Name, Email: entity.User.Email, AvatarURL: entity.User.AvatarURL, HasAccount: entity.User.HasAccount}
+		result.User = &User{ID: entity.User.ID, Name: entity.User.Name, Email: entity.User.Email, AvatarURL: entity.User.AvatarURL}
 	}
 	return result
 }

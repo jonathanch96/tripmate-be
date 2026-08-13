@@ -41,10 +41,14 @@ func actor(ctx *gin.Context) identity.Identity {
 }
 
 // create godoc
-// @Summary Invite by email
+// @Summary Add a member by email
+// @Description Adds the email as a trip participant immediately. If it already has an account,
+// @Description they're attached directly; otherwise a full account is created with the given
+// @Description password (or they can sign in with Google SSO using the same email). There is no
+// @Description pending/invited state.
 // @Tags invitations
 // @Security BearerAuth
-// @Param body body invitationrequest.Create true "Invitation"
+// @Param body body invitationrequest.Create true "New member"
 // @Success 201 {object} response.Envelope{data=invitationresponse.InviteResult}
 // @Failure 403 {object} response.Envelope
 // @Router /trips/{code}/invitations [post]
@@ -53,22 +57,17 @@ func (c *controller) create(ctx *gin.Context) {
 	if !bind(ctx, &request) {
 		return
 	}
-	result, err := c.invitations.Invite(ctx, actor(ctx).UserID, ctx.Param("code"), request.Email)
+	result, err := c.invitations.Invite(ctx, actor(ctx).UserID, ctx.Param("code"), request.Email, request.Name, request.Password)
 	if err != nil {
 		response.Error(ctx, err)
 		return
 	}
 	payload := invitationresponse.InviteResult{Status: result.Status}
-	if result.Invitation != nil {
-		invitation := invitationresponse.FromDomain(*result.Invitation)
-		payload.Invitation = &invitation
-		payload.InviteLink = "/invitations/" + result.Invitation.Token
-	}
 	if result.Participant != nil {
 		participant := participantresponse.FromDomain(*result.Participant)
 		payload.Participant = &participant
 	}
-	response.Created(ctx, "INVITATION_SENT", payload)
+	response.Created(ctx, "MEMBER_ADDED", payload)
 }
 
 // listTrip godoc
