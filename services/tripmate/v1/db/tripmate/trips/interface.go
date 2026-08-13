@@ -16,6 +16,7 @@ type Repository interface {
 	ListByUserID(context.Context, uuid.UUID, tripdomain.ListFilter) ([]domaintrip.Trip, int64, error)
 	Update(context.Context, *domaintrip.Trip) (*domaintrip.Trip, error)
 	SoftDelete(context.Context, uuid.UUID) error
+	SetArchived(context.Context, uuid.UUID, bool) error
 }
 
 var _ Repository = (*adapterGormPostgresql)(nil)

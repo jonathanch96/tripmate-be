@@ -41,6 +41,12 @@ func (f controllerTrips) FindByCode(context.Context, string) (*domaintrip.Trip, 
 	value := f.trip
 	return &value, nil
 }
+func (f controllerTrips) Archive(context.Context, uuid.UUID, string) (*domaintrip.Trip, error) {
+	return nil, nil
+}
+func (f controllerTrips) Unarchive(context.Context, uuid.UUID, string) (*domaintrip.Trip, error) {
+	return nil, nil
+}
 
 type controllerParts struct{ member domainparticipant.Participant }
 

@@ -39,9 +39,3 @@ CREATE TABLE tripmate.exchange_rates (
 );
 CREATE UNIQUE INDEX ux_rates_global ON tripmate.exchange_rates (from_currency, to_currency) WHERE trip_id IS NULL;
 CREATE UNIQUE INDEX ux_rates_trip ON tripmate.exchange_rates (trip_id, from_currency, to_currency) WHERE trip_id IS NOT NULL;
-
-INSERT INTO tripmate.exchange_rates (id, from_currency, to_currency, rate, source) VALUES
-    (gen_random_uuid(), 'IDR', 'PHP', 0.003330000000, 'seed'),
-    (gen_random_uuid(), 'USD', 'PHP', 56.500000000000, 'seed'),
-    (gen_random_uuid(), 'SGD', 'PHP', 42.000000000000, 'seed'),
-    (gen_random_uuid(), 'EUR', 'PHP', 61.000000000000, 'seed');

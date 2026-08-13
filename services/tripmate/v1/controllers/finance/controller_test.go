@@ -55,6 +55,12 @@ func (f fakeTrips) FindByCode(context.Context, string) (*domaintrip.Trip, error)
 	value := f.trip
 	return &value, nil
 }
+func (f fakeTrips) Archive(context.Context, uuid.UUID, string) (*domaintrip.Trip, error) {
+	return nil, nil
+}
+func (f fakeTrips) Unarchive(context.Context, uuid.UUID, string) (*domaintrip.Trip, error) {
+	return nil, nil
+}
 
 type fakeParts struct{ member domainparticipant.Participant }
 

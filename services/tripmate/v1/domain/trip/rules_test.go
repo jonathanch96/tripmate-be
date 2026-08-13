@@ -21,7 +21,13 @@ type tripRepoFake struct {
 func (*tripRepoFake) Create(context.Context, *domaintrip.Trip) (*domaintrip.Trip, error) {
 	return nil, nil
 }
-func (*tripRepoFake) GetByID(context.Context, uuid.UUID) (*domaintrip.Trip, error) { return nil, nil }
+func (r *tripRepoFake) GetByID(context.Context, uuid.UUID) (*domaintrip.Trip, error) {
+	if r.trip == nil {
+		return nil, apperror.New("TRIP_NOT_FOUND")
+	}
+	copy := *r.trip
+	return &copy, nil
+}
 func (r *tripRepoFake) GetByCode(context.Context, string) (*domaintrip.Trip, error) {
 	if r.trip == nil {
 		return nil, apperror.New("TRIP_NOT_FOUND")
@@ -40,6 +46,12 @@ func (r *tripRepoFake) Update(_ context.Context, entity *domaintrip.Trip) (*doma
 	return entity, nil
 }
 func (*tripRepoFake) SoftDelete(context.Context, uuid.UUID) error { return nil }
+func (r *tripRepoFake) SetArchived(_ context.Context, _ uuid.UUID, archived bool) error {
+	if r.trip != nil {
+		r.trip.IsArchived = archived
+	}
+	return nil
+}
 
 type participantRepoFake struct {
 	membership *domainparticipant.Participant
@@ -198,5 +210,36 @@ func TestUpdateSettingsRequiresPlannerAndMutableTrip(t *testing.T) {
 	ctx = tripctx.WithContext(context.Background(), tripctx.TripContext{Trip: entity, Participant: member})
 	if _, err := service.UpdateSettings(ctx, actor, entity.Code, UpdateSettingsInput{}); !apperror.Is(err, "TRIP_FINALIZED") {
 		t.Fatalf("UpdateSettings(finalized) error = %v", err)
+	}
+}
+
+func TestArchiveRequiresPlannerAndTogglesState(t *testing.T) {
+	actor := uuid.New()
+	entity := domaintrip.Trip{ID: uuid.New(), Code: "ABC123", Version: 1}
+	participantMember := domainparticipant.Participant{TripID: entity.ID, UserID: actor, Role: domainparticipant.RoleParticipant}
+	ctx := tripctx.WithContext(context.Background(), tripctx.TripContext{Trip: entity, Participant: participantMember})
+	guard := NewService(Dependencies{})
+	if _, err := guard.Archive(ctx, actor, entity.Code); !apperror.Is(err, "PLANNER_ONLY") {
+		t.Fatalf("Archive(participant) error = %v", err)
+	}
+
+	planner := domainparticipant.Participant{TripID: entity.ID, UserID: actor, Role: domainparticipant.RolePlanner}
+	repo := &tripRepoFake{trip: &entity}
+	service := NewService(Dependencies{Repo: repo, Participants: participantRepoFake{membership: &planner}})
+
+	archived, err := service.Archive(context.Background(), actor, entity.Code)
+	if err != nil || !archived.IsArchived {
+		t.Fatalf("Archive() = %+v, err = %v", archived, err)
+	}
+	if _, err := service.Archive(context.Background(), actor, entity.Code); !apperror.Is(err, "VALIDATION_FAILED") {
+		t.Fatalf("Archive(already archived) error = %v", err)
+	}
+
+	restored, err := service.Unarchive(context.Background(), actor, entity.Code)
+	if err != nil || restored.IsArchived {
+		t.Fatalf("Unarchive() = %+v, err = %v", restored, err)
+	}
+	if _, err := service.Unarchive(context.Background(), actor, entity.Code); !apperror.Is(err, "VALIDATION_FAILED") {
+		t.Fatalf("Unarchive(already active) error = %v", err)
 	}
 }

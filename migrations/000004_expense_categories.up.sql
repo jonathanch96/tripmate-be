@@ -17,6 +17,3 @@ INSERT INTO tripmate.expense_categories (id, trip_id, name, is_default) VALUES
     (uuid_generate_v4(), NULL, 'Activities', TRUE),
     (uuid_generate_v4(), NULL, 'Shopping', TRUE),
     (uuid_generate_v4(), NULL, 'Other', TRUE);
-
-ALTER TABLE tripmate.expenses ADD COLUMN category_id UUID REFERENCES tripmate.expense_categories(id);
-CREATE INDEX ix_expenses_category ON tripmate.expenses (category_id);

@@ -26,6 +26,8 @@ type Trip struct {
 	PlannerID                uuid.UUID
 	IsFinalized              bool
 	FinalizedAt              *time.Time
+	IsArchived               bool
+	ArchivedAt               *time.Time
 	Settings                 Settings
 	Version                  int
 	CreatedAt, UpdatedAt     time.Time

@@ -35,6 +35,23 @@ func (a *adapterGormPostgresql) SetFinalized(ctx context.Context, id uuid.UUID, 
 	return nil
 }
 
+func (a *adapterGormPostgresql) SetArchived(ctx context.Context, id uuid.UUID, archived bool) error {
+	values := map[string]any{"is_archived": archived, "version": gorm.Expr("version + 1"), "updated_at": gorm.Expr("now()")}
+	if archived {
+		values["archived_at"] = gorm.Expr("now()")
+	} else {
+		values["archived_at"] = nil
+	}
+	result := appdb.FromContext(ctx, a.db).WithContext(ctx).Model(&Trip{}).Where("id = ?", id).Updates(values)
+	if result.Error != nil {
+		return apperror.Wrap(result.Error, "INTERNAL_ERROR")
+	}
+	if result.RowsAffected == 0 {
+		return apperror.New("TRIP_NOT_FOUND")
+	}
+	return nil
+}
+
 func New(db *gorm.DB) *adapterGormPostgresql { return NewGormPostgresqlAdapter(db) }
 
 func (a *adapterGormPostgresql) Create(ctx context.Context, entity *domaintrip.Trip) (*domaintrip.Trip, error) {
@@ -75,7 +92,8 @@ func (a *adapterGormPostgresql) ExistsByCode(ctx context.Context, code string) (
 func (a *adapterGormPostgresql) ListByUserID(ctx context.Context, userID uuid.UUID, filter tripdomain.ListFilter) ([]domaintrip.Trip, int64, error) {
 	query := a.db.WithContext(ctx).Model(&Trip{}).
 		Joins("JOIN tripmate.trip_participants p ON p.trip_id = tripmate.trips.id AND p.deleted_at IS NULL").
-		Where("p.user_id = ?", userID)
+		Where("p.user_id = ?", userID).
+		Where("tripmate.trips.is_archived = ?", filter.Archived)
 	var total int64
 	if err := query.Count(&total).Error; err != nil {
 		return nil, 0, apperror.Wrap(err, "INTERNAL_ERROR")

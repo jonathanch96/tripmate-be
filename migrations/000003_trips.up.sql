@@ -2,7 +2,8 @@ CREATE TABLE tripmate.trips (
     id UUID PRIMARY KEY, code VARCHAR(10) NOT NULL, name VARCHAR(160) NOT NULL,
     base_currency CHAR(3) NOT NULL, start_date DATE NOT NULL, end_date DATE NOT NULL,
     planner_id UUID NOT NULL REFERENCES tripmate.users(id), is_finalized BOOLEAN NOT NULL DEFAULT FALSE,
-    finalized_at TIMESTAMPTZ, setting_edit_permission VARCHAR(20) NOT NULL DEFAULT 'everyone'
+    finalized_at TIMESTAMPTZ, is_archived BOOLEAN NOT NULL DEFAULT FALSE, archived_at TIMESTAMPTZ,
+    setting_edit_permission VARCHAR(20) NOT NULL DEFAULT 'everyone'
         CHECK (setting_edit_permission IN ('everyone','own_only')),
     setting_approval_expenses BOOLEAN NOT NULL DEFAULT FALSE,
     setting_approval_settlements BOOLEAN NOT NULL DEFAULT TRUE,
@@ -14,6 +15,7 @@ CREATE TABLE tripmate.trips (
 );
 CREATE UNIQUE INDEX ux_trips_code ON tripmate.trips (code) WHERE deleted_at IS NULL;
 CREATE INDEX ix_trips_planner ON tripmate.trips (planner_id);
+CREATE INDEX ix_trips_planner_archived ON tripmate.trips (planner_id, is_archived);
 
 CREATE TABLE tripmate.trip_participants (
     id UUID PRIMARY KEY, trip_id UUID NOT NULL REFERENCES tripmate.trips(id) ON DELETE CASCADE,

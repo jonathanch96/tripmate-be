@@ -2,7 +2,8 @@ CREATE TABLE tripmate.users (
     id            UUID PRIMARY KEY,
     email         CITEXT NOT NULL,
     name          VARCHAR(120) NOT NULL,
-    password_hash TEXT NOT NULL,
+    password_hash TEXT,
+    google_id     TEXT,
     avatar_url    TEXT,
     created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -10,6 +11,7 @@ CREATE TABLE tripmate.users (
 );
 
 CREATE UNIQUE INDEX ux_users_email ON tripmate.users (email) WHERE deleted_at IS NULL;
+CREATE UNIQUE INDEX ux_users_google_id ON tripmate.users (google_id) WHERE google_id IS NOT NULL;
 
 CREATE TABLE tripmate.refresh_tokens (
     id         UUID PRIMARY KEY,

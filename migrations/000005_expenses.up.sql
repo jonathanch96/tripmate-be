@@ -1,11 +1,12 @@
 CREATE TABLE tripmate.expenses (
     id UUID PRIMARY KEY,
     trip_id UUID NOT NULL REFERENCES tripmate.trips(id) ON DELETE CASCADE,
+    category_id UUID REFERENCES tripmate.expense_categories(id),
     expense_date DATE NOT NULL,
     description VARCHAR(255) NOT NULL,
     amount NUMERIC(20,6) NOT NULL CHECK (amount > 0),
     currency CHAR(3) NOT NULL,
-    split_type VARCHAR(10) NOT NULL CHECK (split_type IN ('equal','manual','item')),
+    split_type VARCHAR(10) NOT NULL CHECK (split_type IN ('equal','manual','item','percent','shares')),
     status VARCHAR(10) NOT NULL DEFAULT 'approved' CHECK (status IN ('pending','approved','rejected')),
     source VARCHAR(10) NOT NULL DEFAULT 'manual' CHECK (source IN ('manual','receipt')),
     note TEXT,
@@ -20,6 +21,7 @@ CREATE TABLE tripmate.expenses (
 );
 CREATE INDEX ix_expenses_trip_status ON tripmate.expenses (trip_id, status) WHERE deleted_at IS NULL;
 CREATE INDEX ix_expenses_trip_date ON tripmate.expenses (trip_id, expense_date DESC) WHERE deleted_at IS NULL;
+CREATE INDEX ix_expenses_category ON tripmate.expenses (category_id);
 
 CREATE TABLE tripmate.expense_payers (
     id UUID PRIMARY KEY,
@@ -36,6 +38,7 @@ CREATE TABLE tripmate.expense_splits (
     expense_id UUID NOT NULL REFERENCES tripmate.expenses(id) ON DELETE CASCADE,
     user_id UUID NOT NULL REFERENCES tripmate.users(id),
     amount NUMERIC(20,6) NOT NULL CHECK (amount >= 0),
+    weight NUMERIC(20,6) CHECK (weight >= 0),
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE UNIQUE INDEX ux_expense_splits ON tripmate.expense_splits (expense_id, user_id);

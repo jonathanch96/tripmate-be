@@ -109,7 +109,7 @@ func NewService(deps Dependencies) *Service {
 	inviteService := invitationdomain.NewService(inviteRepo, tripRepo, userService, partService)
 	return &Service{
 		auth: authcontroller.NewController(userService), users: usercontroller.NewController(userService),
-		trips:   tripcontroller.NewController(tripService, partService),
+		trips:   tripcontroller.NewController(tripService, partService, balanceService),
 		parts:   participantcontroller.NewController(tripService, partService),
 		invites: invitationcontroller.NewController(tripService, partService, inviteService), issuer: issuer,
 		expenses:   expensecontroller.NewController(tripService, partService, expenseService),

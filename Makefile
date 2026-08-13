@@ -1,4 +1,4 @@
-.PHONY: run build test test-int lint lint-arch swagger migrate-up migrate-down migrate-create mocks up down seed
+.PHONY: run build test test-int lint lint-arch swagger migrate-up migrate-down migrate-create migrate-refresh mocks up down seed
 
 ifneq (,$(wildcard .env))
 include .env
@@ -38,6 +38,13 @@ migrate-down:
 migrate-create:
 	@test -n "$(name)" || (echo "usage: make migrate-create name=<name>" && exit 1)
 	go run github.com/golang-migrate/migrate/v4/cmd/migrate@v4.19.1 create -ext sql -dir migrations -seq $(name)
+
+# Drops every table and re-runs all migrations from scratch, restoring default seed data
+# (expense categories). Local/test/staging only - refuses to run against production.
+migrate-refresh:
+	@test "$(APP_ENV)" != "production" || (echo "refuse to run migrate-refresh against production (APP_ENV=production)" && exit 1)
+	go run -tags postgres github.com/golang-migrate/migrate/v4/cmd/migrate@v4.19.1 -path "$(CURDIR)/migrations" -database "$(MIGRATE_DSN)" down -all
+	go run -tags postgres github.com/golang-migrate/migrate/v4/cmd/migrate@v4.19.1 -path "$(CURDIR)/migrations" -database "$(MIGRATE_DSN)" up
 
 mocks:
 	go run github.com/vektra/mockery/v2@v2.53.5

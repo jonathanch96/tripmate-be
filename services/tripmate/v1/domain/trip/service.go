@@ -133,6 +133,33 @@ func (s *service) UpdateSettings(ctx context.Context, actor uuid.UUID, code stri
 	return s.deps.Repo.Update(ctx, entity)
 }
 
+func (s *service) Archive(ctx context.Context, actor uuid.UUID, code string) (*domaintrip.Trip, error) {
+	entity, err := s.plannerTrip(ctx, actor, code)
+	if err != nil {
+		return nil, err
+	}
+	if entity.IsArchived {
+		return nil, apperror.New("VALIDATION_FAILED")
+	}
+	if err = s.deps.Repo.SetArchived(ctx, entity.ID, true); err != nil {
+		return nil, err
+	}
+	return s.deps.Repo.GetByID(ctx, entity.ID)
+}
+func (s *service) Unarchive(ctx context.Context, actor uuid.UUID, code string) (*domaintrip.Trip, error) {
+	entity, err := s.plannerTrip(ctx, actor, code)
+	if err != nil {
+		return nil, err
+	}
+	if !entity.IsArchived {
+		return nil, apperror.New("VALIDATION_FAILED")
+	}
+	if err = s.deps.Repo.SetArchived(ctx, entity.ID, false); err != nil {
+		return nil, err
+	}
+	return s.deps.Repo.GetByID(ctx, entity.ID)
+}
+
 func (s *service) plannerTrip(ctx context.Context, actor uuid.UUID, code string) (*domaintrip.Trip, error) {
 	if authorized, ok := tripctx.ForActor(ctx, actor, code); ok {
 		if authorized.Participant.Role != domainparticipant.RolePlanner {
