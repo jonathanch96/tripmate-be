@@ -33,6 +33,7 @@ type TripRepository interface {
 }
 type UserFinder interface {
 	FindByEmail(context.Context, string) (*domainuser.User, error)
+	CreatePlaceholder(ctx context.Context, email, name string) (*domainuser.User, error)
 }
 type Result struct {
 	Status      string
@@ -69,10 +70,23 @@ func (s *service) Invite(ctx context.Context, actor uuid.UUID, code, email strin
 	} else if !apperror.Is(e, "USER_NOT_FOUND") {
 		return nil, e
 	}
+	// No account exists for this email yet - create a placeholder one now instead of waiting for
+	// them to sign up, so the planner can assign them as an expense payer/split participant right
+	// away. Register or AuthenticateGoogle claims the same row later. They're still tracked with
+	// a pending invitation/token so they can be sent a link and Accept() can mark it accepted once
+	// they do sign in.
+	placeholder, err := s.users.CreatePlaceholder(ctx, email, "")
+	if err != nil {
+		return nil, err
+	}
+	participant, err := s.parts.Add(ctx, actor, code, placeholder.ID)
+	if err != nil {
+		return nil, err
+	}
 	if existing, e := s.repo.GetPending(ctx, t.ID, email); e == nil {
 		existing.ExpiresAt = s.clock().UTC().Add(14 * 24 * time.Hour)
 		updated, e := s.repo.Update(ctx, existing)
-		return &Result{Status: "invited", Invitation: updated}, e
+		return &Result{Status: "invited", Invitation: updated, Participant: participant}, e
 	} else if !apperror.Is(e, "INVITATION_NOT_FOUND") {
 		return nil, e
 	}
@@ -82,7 +96,7 @@ func (s *service) Invite(ctx context.Context, actor uuid.UUID, code, email strin
 	}
 	inv := &domaininv.Invitation{ID: uuid.New(), TripID: t.ID, Email: email, Token: hex.EncodeToString(raw), Status: domaininv.StatusPending, InvitedBy: actor, ExpiresAt: s.clock().UTC().Add(14 * 24 * time.Hour)}
 	created, err := s.repo.Create(ctx, inv)
-	return &Result{Status: "invited", Invitation: created}, err
+	return &Result{Status: "invited", Invitation: created, Participant: participant}, err
 }
 func (s *service) Accept(ctx context.Context, actor uuid.UUID, email, token string) (*domainparticipant.Participant, error) {
 	inv, err := s.repo.GetByToken(ctx, token)
