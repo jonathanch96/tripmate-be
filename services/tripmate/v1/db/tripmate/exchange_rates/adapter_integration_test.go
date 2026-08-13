@@ -35,18 +35,22 @@ func integrationDB(t *testing.T) *gorm.DB {
 	return db
 }
 
-func TestListEffectiveTripRateShadowsGlobalAndUpsertUpdatesInPlace(t *testing.T) {
+func TestListEffectiveOnlyReturnsTripsOwnRatesAndUpsertUpdatesInPlace(t *testing.T) {
 	db, ctx := integrationDB(t), context.Background()
-	plannerID, tripID := uuid.New(), uuid.New()
+	plannerID, tripID, otherTripID := uuid.New(), uuid.New(), uuid.New()
 	code := uuid.NewString()[:6]
+	otherCode := uuid.NewString()[:6]
 	if err := db.Exec(`INSERT INTO tripmate.users (id,email,name,password_hash) VALUES (?,?,?,?)`, plannerID, plannerID.String()+"@example.com", "Planner", "hash").Error; err != nil {
 		t.Fatal(err)
 	}
 	if err := db.Exec(`INSERT INTO tripmate.trips (id,code,name,base_currency,start_date,end_date,planner_id) VALUES (?,?,?,?,?,?,?)`, tripID, code, "FX Adapter", "PHP", time.Now(), time.Now().Add(24*time.Hour), plannerID).Error; err != nil {
 		t.Fatal(err)
 	}
+	if err := db.Exec(`INSERT INTO tripmate.trips (id,code,name,base_currency,start_date,end_date,planner_id) VALUES (?,?,?,?,?,?,?)`, otherTripID, otherCode, "FX Adapter Other", "PHP", time.Now(), time.Now().Add(24*time.Hour), plannerID).Error; err != nil {
+		t.Fatal(err)
+	}
 	t.Cleanup(func() {
-		db.Exec("DELETE FROM tripmate.trips WHERE id = ?", tripID)
+		db.Exec("DELETE FROM tripmate.trips WHERE id IN (?, ?)", tripID, otherTripID)
 		db.Exec("DELETE FROM tripmate.users WHERE id = ?", plannerID)
 	})
 
@@ -57,6 +61,11 @@ func TestListEffectiveTripRateShadowsGlobalAndUpsertUpdatesInPlace(t *testing.T)
 	}
 	if created.ID == uuid.Nil || created.TripID == nil || !created.Rate.Equal(decimal.RequireFromString("57.25")) {
 		t.Fatalf("Upsert(create) = %+v", created)
+	}
+	// A second, unrelated trip's own rate for the same pair must never appear in the first trip's
+	// list - each trip's exchange rates are its own configuration, not shared/global.
+	if _, err := repo.Upsert(ctx, domainfx.Rate{TripID: &otherTripID, FromCurrency: "usd", ToCurrency: "php", Rate: decimal.RequireFromString("99.99"), IsFinal: true, Source: domainfx.SourceManual}); err != nil {
+		t.Fatal(err)
 	}
 
 	effective, err := repo.ListEffective(ctx, tripID)
@@ -73,7 +82,7 @@ func TestListEffectiveTripRateShadowsGlobalAndUpsertUpdatesInPlace(t *testing.T)
 		}
 	}
 	if usdRows != 1 {
-		t.Fatalf("effective USD→PHP row count = %d", usdRows)
+		t.Fatalf("effective USD→PHP row count = %d, want 1 (the other trip's rate must not leak in)", usdRows)
 	}
 
 	created.Rate = decimal.RequireFromString("58.125")
@@ -83,9 +92,5 @@ func TestListEffectiveTripRateShadowsGlobalAndUpsertUpdatesInPlace(t *testing.T)
 	}
 	if updated.ID != created.ID || !updated.Rate.Equal(decimal.RequireFromString("58.125")) {
 		t.Fatalf("Upsert(update) = %+v", updated)
-	}
-	global, err := repo.Get(ctx, nil, "USD", "PHP")
-	if err != nil || !global.Rate.Equal(decimal.RequireFromString("56.5")) {
-		t.Fatalf("global rate changed = %+v, %v", global, err)
 	}
 }
