@@ -17,30 +17,19 @@ type adapterGormPostgresql struct{ db *gorm.DB }
 
 func New(db *gorm.DB) *adapterGormPostgresql { return &adapterGormPostgresql{db: db} }
 
+// ListEffective returns only this trip's own rates. Exchange rates are trip-scoped configuration
+// - each trip's owner sets their own - so this deliberately does not fall back to or merge in any
+// globally-stored row (trip_id IS NULL); a trip with no rate for a pair has no rate for that pair.
 func (a *adapterGormPostgresql) ListEffective(ctx context.Context, tripID uuid.UUID) ([]domainfx.Rate, error) {
 	var models []ExchangeRate
-	err := appdb.FromContext(ctx, a.db).WithContext(ctx).Where("trip_id = ? OR trip_id IS NULL", tripID).
-		Order("from_currency, to_currency, trip_id NULLS FIRST").Find(&models).Error
+	err := appdb.FromContext(ctx, a.db).WithContext(ctx).Where("trip_id = ?", tripID).
+		Order("from_currency, to_currency").Find(&models).Error
 	if err != nil {
 		return nil, apperror.Wrap(err, "INTERNAL_ERROR")
 	}
-	byPair := make(map[string]domainfx.Rate, len(models))
-	for _, model := range models {
-		row := toDomain(model)
-		key := row.FromCurrency + "\x00" + row.ToCurrency
-		current, exists := byPair[key]
-		if !exists || current.TripID == nil || row.TripID != nil {
-			byPair[key] = row
-		}
-	}
-	result := make([]domainfx.Rate, 0, len(byPair))
-	for _, model := range models {
-		key := model.FromCurrency + "\x00" + model.ToCurrency
-		row, exists := byPair[key]
-		if exists && row.ID == model.ID {
-			result = append(result, row)
-			delete(byPair, key)
-		}
+	result := make([]domainfx.Rate, len(models))
+	for i, model := range models {
+		result[i] = toDomain(model)
 	}
 	return result, nil
 }
