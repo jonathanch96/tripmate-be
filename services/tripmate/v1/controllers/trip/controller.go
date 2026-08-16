@@ -81,7 +81,7 @@ func (c *controller) create(ctx *gin.Context) {
 		return
 	}
 	entity, err := c.trips.Create(ctx, actor(ctx).UserID, tripdomain.CreateInput{
-		Name: request.Name, BaseCurrency: request.BaseCurrency, StartDate: startDate, EndDate: endDate,
+		Name: request.Name, BaseCurrency: request.BaseCurrency, Country: request.Country, StartDate: startDate, EndDate: endDate,
 		Settings: createSettings(request),
 	})
 	if err != nil {

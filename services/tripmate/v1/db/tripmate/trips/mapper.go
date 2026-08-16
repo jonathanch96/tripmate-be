@@ -4,7 +4,7 @@ import domaintrip "github.com/jblabs/tripmate-be/services/tripmate/v1/entities/d
 
 func fromDomain(entity domaintrip.Trip) Trip {
 	return Trip{
-		ID: entity.ID, Code: entity.Code, Name: entity.Name, BaseCurrency: entity.BaseCurrency,
+		ID: entity.ID, Code: entity.Code, Name: entity.Name, BaseCurrency: entity.BaseCurrency, Country: entity.Country,
 		StartDate: entity.StartDate, EndDate: entity.EndDate, PlannerID: entity.PlannerID,
 		IsFinalized: entity.IsFinalized, FinalizedAt: entity.FinalizedAt,
 		EditPermission:      string(entity.Settings.EditPermission),
@@ -18,7 +18,7 @@ func fromDomain(entity domaintrip.Trip) Trip {
 
 func toDomain(model Trip) domaintrip.Trip {
 	return domaintrip.Trip{
-		ID: model.ID, Code: model.Code, Name: model.Name, BaseCurrency: model.BaseCurrency,
+		ID: model.ID, Code: model.Code, Name: model.Name, BaseCurrency: model.BaseCurrency, Country: model.Country,
 		StartDate: model.StartDate, EndDate: model.EndDate, PlannerID: model.PlannerID,
 		IsFinalized: model.IsFinalized, FinalizedAt: model.FinalizedAt,
 		Settings: domaintrip.Settings{

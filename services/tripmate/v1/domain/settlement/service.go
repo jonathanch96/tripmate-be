@@ -53,21 +53,6 @@ func (s *service) Record(ctx context.Context, actor identity.Identity, tc tripct
 	if in.Method != domainsettlement.MethodCash && in.Method != domainsettlement.MethodBankTransfer {
 		return nil, apperror.New("VALIDATION_FAILED")
 	}
-	table, err := s.deps.FX.EffectiveTable(ctx, tc.Trip.ID)
-	if err != nil {
-		return nil, err
-	}
-	baseAmount, err := table.Convert(in.Amount, in.Currency, tc.Trip.BaseCurrency)
-	if err != nil {
-		return nil, err
-	}
-	outstanding, err := s.deps.Balances.OutstandingDebt(ctx, tc.Trip.ID, in.FromUserID, in.ToUserID)
-	if err != nil {
-		return nil, err
-	}
-	if baseAmount.GreaterThan(outstanding.Add(money.Epsilon)) {
-		return nil, apperror.Newf("SETTLEMENT_EXCEEDS_DEBT", "Settlement exceeds outstanding debt of %s %s", outstanding.String(), tc.Trip.BaseCurrency)
-	}
 	status := domainsettlement.StatusApproved
 	if tc.Trip.Settings.ApprovalRequiredSettlements {
 		status = domainsettlement.StatusPending

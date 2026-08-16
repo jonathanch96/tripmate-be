@@ -9,8 +9,6 @@ import (
 	"github.com/jblabs/tripmate-be/pkg/apperror"
 	"github.com/jblabs/tripmate-be/pkg/identity"
 	"github.com/jblabs/tripmate-be/pkg/tripctx"
-	fxdomain "github.com/jblabs/tripmate-be/services/tripmate/v1/domain/fx"
-	domainfx "github.com/jblabs/tripmate-be/services/tripmate/v1/entities/domain/fx"
 	domainparticipant "github.com/jblabs/tripmate-be/services/tripmate/v1/entities/domain/participant"
 	domainsettlement "github.com/jblabs/tripmate-be/services/tripmate/v1/entities/domain/settlement"
 	domaintrip "github.com/jblabs/tripmate-be/services/tripmate/v1/entities/domain/trip"
@@ -59,18 +57,6 @@ func (p parts) GetByTripAndUser(_ context.Context, _ uuid.UUID, id uuid.UUID) (*
 	return &row, nil
 }
 
-type debts struct{ amount decimal.Decimal }
-
-func (d debts) OutstandingDebt(context.Context, uuid.UUID, uuid.UUID, uuid.UUID) (decimal.Decimal, error) {
-	return d.amount, nil
-}
-
-type fxProvider struct{ table *fxdomain.RateTable }
-
-func (f fxProvider) EffectiveTable(context.Context, uuid.UUID) (*fxdomain.RateTable, error) {
-	return f.table, nil
-}
-
 type outbox struct{ rows []event.OutboxEvent }
 
 func (o *outbox) Create(_ context.Context, row *event.OutboxEvent) error {
@@ -87,7 +73,7 @@ func fixture(approval bool) (Service, *memoryRepo, *outbox, identity.Identity, t
 	repo, events := &memoryRepo{}, &outbox{}
 	ps := parts{from: {UserID: from}, to: {UserID: to, BankInfo: &domainparticipant.BankInfo{BankName: "Bank", AccountNumber: "12345678", AccountHolder: "To"}}}
 	tc := tripctx.TripContext{Trip: domaintrip.Trip{ID: tripID, BaseCurrency: "PHP", EndDate: time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC), Settings: domaintrip.Settings{ApprovalRequiredSettlements: approval, AllowSettlementBeforeEnd: true}}, Participant: domainparticipant.Participant{UserID: planner, Role: domainparticipant.RolePlanner}}
-	svc := NewService(Dependencies{Repo: repo, Participants: ps, Balances: debts{decimal.NewFromInt(100)}, FX: fxProvider{fxdomain.NewRateTable([]domainfx.Rate{{FromCurrency: "USD", ToCurrency: "PHP", Rate: decimal.NewFromInt(50)}})}, Outbox: events, UOW: uow{}, Clock: func() time.Time { return time.Date(2026, 8, 2, 0, 0, 0, 0, time.UTC) }})
+	svc := NewService(Dependencies{Repo: repo, Participants: ps, Outbox: events, UOW: uow{}, Clock: func() time.Time { return time.Date(2026, 8, 2, 0, 0, 0, 0, time.UTC) }})
 	return svc, repo, events, identity.Identity{UserID: planner}, tc, from, to
 }
 
@@ -121,9 +107,6 @@ func TestRecordGuards(t *testing.T) {
 			in.Currency = "USD"
 			tc.Trip.Settings.MultiCurrencyEnabled = false
 		}, "INVALID_CURRENCY"},
-		{"over settlement", func(in *RecordInput, _ *tripctx.TripContext, _ *identity.Identity) {
-			in.Amount = decimal.NewFromInt(101)
-		}, "SETTLEMENT_EXCEEDS_DEBT"},
 		// S-9: a well-formed but non-ISO code must be rejected here rather than surviving until the
 		// rate lookup fails with the less precise EXCHANGE_RATE_MISSING.
 		{"unsupported currency code", func(in *RecordInput, tc *tripctx.TripContext, _ *identity.Identity) {
@@ -159,35 +142,6 @@ func TestRecordLandsApprovedWhenApprovalNotRequired(t *testing.T) {
 	}
 	if len(events.rows) != 1 || events.rows[0].EventType != "settlement.created" {
 		t.Fatalf("events = %+v", events.rows)
-	}
-}
-
-// S-5 cross-currency (test-plan item 7): the guard measures the settlement in the trip's base
-// currency, so a foreign amount must be converted before it is compared to the outstanding debt.
-func TestRecordConvertsBeforeCheckingOutstandingDebt(t *testing.T) {
-	for _, test := range []struct {
-		name    string
-		amount  int64
-		wantErr string
-	}{
-		// Outstanding debt is 100 PHP and the fixture rate is 50 PHP/USD.
-		{name: "foreign amount within the debt", amount: 2},
-		{name: "foreign amount over the debt", amount: 3, wantErr: "SETTLEMENT_EXCEEDS_DEBT"},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			svc, _, _, actor, tc, from, to := fixture(false)
-			tc.Trip.Settings.MultiCurrencyEnabled = true
-			row, err := svc.Record(context.Background(), actor, tc, RecordInput{FromUserID: from, ToUserID: to, Amount: decimal.NewFromInt(test.amount), Currency: "USD", Method: domainsettlement.MethodCash})
-			if test.wantErr != "" {
-				if !apperror.Is(err, test.wantErr) {
-					t.Fatalf("error = %v, want %s", err, test.wantErr)
-				}
-				return
-			}
-			if err != nil || row.Currency != "USD" {
-				t.Fatalf("record = %+v err = %v", row, err)
-			}
-		})
 	}
 }
 

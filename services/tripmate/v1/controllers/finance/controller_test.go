@@ -104,9 +104,6 @@ func (f *fakeBalances) Ledger(context.Context, tripctx.TripContext, balancedomai
 	}
 	return &domainbalance.Ledger{BaseCurrency: "PHP", MemberUserID: actorID, NetBalance: decimal.RequireFromString("80.5")}, nil
 }
-func (f *fakeBalances) OutstandingDebt(context.Context, uuid.UUID, uuid.UUID, uuid.UUID) (decimal.Decimal, error) {
-	return decimal.Zero, nil
-}
 func (f *fakeBalances) FinalSettlement(context.Context, tripctx.TripContext) (*domainbalance.FinalPlan, error) {
 	f.calls++
 	if f.err != nil {

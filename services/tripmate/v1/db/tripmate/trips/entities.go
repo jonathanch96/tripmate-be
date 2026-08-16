@@ -12,6 +12,7 @@ type Trip struct {
 	Code                string         `gorm:"column:code"`
 	Name                string         `gorm:"column:name"`
 	BaseCurrency        string         `gorm:"column:base_currency"`
+	Country             *string        `gorm:"column:country"`
 	StartDate           time.Time      `gorm:"column:start_date"`
 	EndDate             time.Time      `gorm:"column:end_date"`
 	PlannerID           uuid.UUID      `gorm:"column:planner_id"`

@@ -22,13 +22,17 @@ type Settings struct {
 type Trip struct {
 	ID                       uuid.UUID
 	Code, Name, BaseCurrency string
-	StartDate, EndDate       time.Time
-	PlannerID                uuid.UUID
-	IsFinalized              bool
-	FinalizedAt              *time.Time
-	Settings                 Settings
-	Version                  int
-	CreatedAt, UpdatedAt     time.Time
+	// Country is a free-form, planner-entered label (e.g. "Japan") with no relation to
+	// BaseCurrency - it exists purely to group trips on the cross-trip analytics page and is
+	// never required.
+	Country              *string
+	StartDate, EndDate   time.Time
+	PlannerID            uuid.UUID
+	IsFinalized          bool
+	FinalizedAt          *time.Time
+	Settings             Settings
+	Version              int
+	CreatedAt, UpdatedAt time.Time
 	// Currencies is every currency actually used on the trip (base currency plus whatever its
 	// expenses are recorded in). Only populated by the trip list query, for the "My trips" cards -
 	// nil elsewhere.

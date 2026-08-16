@@ -18,6 +18,7 @@ type Dependencies struct {
 type service struct{ deps Dependencies }
 type CreateInput struct {
 	Name, BaseCurrency string
+	Country            *string
 	StartDate, EndDate time.Time
 	Settings           domaintrip.Settings
 }

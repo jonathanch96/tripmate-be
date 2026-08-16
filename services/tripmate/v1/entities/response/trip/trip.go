@@ -18,6 +18,7 @@ type Trip struct {
 	Code            string    `json:"code"`
 	Name            string    `json:"name"`
 	BaseCurrency    string    `json:"base_currency"`
+	Country         *string   `json:"country,omitempty"`
 	StartDate       string    `json:"start_date"`
 	EndDate         string    `json:"end_date"`
 	PlannerID       uuid.UUID `json:"planner_id"`
@@ -32,7 +33,7 @@ type Trip struct {
 
 func FromDomain(entity domaintrip.Trip, canEditSettings bool) Trip {
 	return Trip{
-		ID: entity.ID, Code: entity.Code, Name: entity.Name, BaseCurrency: entity.BaseCurrency,
+		ID: entity.ID, Code: entity.Code, Name: entity.Name, BaseCurrency: entity.BaseCurrency, Country: entity.Country,
 		StartDate: entity.StartDate.Format("2006-01-02"), EndDate: entity.EndDate.Format("2006-01-02"),
 		PlannerID: entity.PlannerID, IsFinalized: entity.IsFinalized, Version: entity.Version,
 		CanEditSettings: canEditSettings, Currencies: entity.Currencies,

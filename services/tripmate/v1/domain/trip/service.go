@@ -42,6 +42,7 @@ func (s *service) Create(ctx context.Context, actor uuid.UUID, in CreateInput) (
 	if !currency(in.BaseCurrency) {
 		return nil, apperror.New("INVALID_CURRENCY")
 	}
+	country := trimmedOrNil(in.Country)
 	if in.EndDate.Before(in.StartDate) {
 		return nil, apperror.WithFields("VALIDATION_FAILED", []apperror.FieldError{{Field: "end_date", Rule: "dateafter", Message: "end_date must be on or after start_date"}})
 	}
@@ -63,7 +64,7 @@ func (s *service) Create(ctx context.Context, actor uuid.UUID, in CreateInput) (
 	if code == "" {
 		return nil, apperror.New("TRIP_CODE_COLLISION")
 	}
-	entity := &domaintrip.Trip{ID: uuid.New(), Code: code, Name: in.Name, BaseCurrency: in.BaseCurrency, StartDate: date(in.StartDate), EndDate: date(in.EndDate), PlannerID: actor, Settings: in.Settings, Version: 1}
+	entity := &domaintrip.Trip{ID: uuid.New(), Code: code, Name: in.Name, BaseCurrency: in.BaseCurrency, Country: country, StartDate: date(in.StartDate), EndDate: date(in.EndDate), PlannerID: actor, Settings: in.Settings, Version: 1}
 	part := &domainparticipant.Participant{ID: uuid.New(), TripID: entity.ID, UserID: actor, Role: domainparticipant.RolePlanner, JoinedAt: time.Now().UTC()}
 	return s.deps.Tx.CreateTripWithPlanner(ctx, entity, part)
 }
@@ -153,6 +154,20 @@ func (s *service) plannerTrip(ctx context.Context, actor uuid.UUID, code string)
 func date(v time.Time) time.Time {
 	y, m, d := v.UTC().Date()
 	return time.Date(y, m, d, 0, 0, 0, 0, time.UTC)
+}
+
+// trimmedOrNil collapses an absent, empty, or whitespace-only optional string down to nil, so a
+// trip created with country:"" (or country:"  ") stores the same "no country set" state as
+// omitting the field entirely.
+func trimmedOrNil(v *string) *string {
+	if v == nil {
+		return nil
+	}
+	trimmed := strings.TrimSpace(*v)
+	if trimmed == "" {
+		return nil
+	}
+	return &trimmed
 }
 func currency(v string) bool {
 	switch v {

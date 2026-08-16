@@ -103,8 +103,8 @@ func NewService(deps Dependencies) *Service {
 		Storage: deps.Storage, OCR: deps.OCR, Expenses: expenseService, UOW: appdb.NewGormUnitOfWork(deps.DB)})
 	rateService := fxdomain.NewService(fxdomain.Dependencies{Repo: ratesdb.New(deps.DB), UOW: appdb.NewGormUnitOfWork(deps.DB)})
 	settlementRepo := settlementsdb.New(deps.DB)
-	balanceService := balancedomain.NewService(balancedomain.Dependencies{Expenses: expenseRepo, Settlements: settlementRepo, Participants: partRepo, FX: rateService, Trips: tripRepo})
-	settlementService := settlementdomain.NewService(settlementdomain.Dependencies{Repo: settlementRepo, Participants: partRepo, Balances: balanceService, FX: rateService, Outbox: outboxdb.New(deps.DB), UOW: appdb.NewGormUnitOfWork(deps.DB)})
+	balanceService := balancedomain.NewService(balancedomain.Dependencies{Expenses: expenseRepo, Settlements: settlementRepo, Participants: partRepo, FX: rateService})
+	settlementService := settlementdomain.NewService(settlementdomain.Dependencies{Repo: settlementRepo, Participants: partRepo, Outbox: outboxdb.New(deps.DB), UOW: appdb.NewGormUnitOfWork(deps.DB)})
 	finalService := finaldomain.NewService(finaldomain.Dependencies{Balances: balanceService, FX: rateService, Trips: tripRepo, Outbox: outboxdb.New(deps.DB), UOW: appdb.NewGormUnitOfWork(deps.DB)})
 	inviteService := invitationdomain.NewService(inviteRepo, tripRepo, userService, partService)
 	return &Service{

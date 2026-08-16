@@ -7,7 +7,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/jblabs/tripmate-be/pkg/identity"
 	"github.com/jblabs/tripmate-be/pkg/tripctx"
-	fxdomain "github.com/jblabs/tripmate-be/services/tripmate/v1/domain/fx"
 	shared "github.com/jblabs/tripmate-be/services/tripmate/v1/domain/shared"
 	domainparticipant "github.com/jblabs/tripmate-be/services/tripmate/v1/entities/domain/participant"
 	domainsettlement "github.com/jblabs/tripmate-be/services/tripmate/v1/entities/domain/settlement"
@@ -41,12 +40,6 @@ type Repository interface {
 type ParticipantRepository interface {
 	GetByTripAndUser(context.Context, uuid.UUID, uuid.UUID) (*domainparticipant.Participant, error)
 }
-type BalanceService interface {
-	OutstandingDebt(context.Context, uuid.UUID, uuid.UUID, uuid.UUID) (decimal.Decimal, error)
-}
-type FXProvider interface {
-	EffectiveTable(context.Context, uuid.UUID) (*fxdomain.RateTable, error)
-}
 type OutboxRepository interface {
 	Create(context.Context, *event.OutboxEvent) error
 }
@@ -54,8 +47,6 @@ type OutboxRepository interface {
 type Dependencies struct {
 	Repo         Repository
 	Participants ParticipantRepository
-	Balances     BalanceService
-	FX           FXProvider
 	Outbox       OutboxRepository
 	UOW          shared.UnitOfWork
 	Clock        func() time.Time

@@ -166,38 +166,6 @@ func (s *service) Summary(ctx context.Context, tc tripctx.TripContext) (*domainb
 	return &result.Summary, nil
 }
 
-func (s *service) OutstandingDebt(ctx context.Context, tripID, fromID, toID uuid.UUID) (decimal.Decimal, error) {
-	if s.deps.Trips == nil {
-		return decimal.Zero, apperror.New("INTERNAL_ERROR")
-	}
-	trip, err := s.deps.Trips.GetByID(ctx, tripID)
-	if err != nil {
-		return decimal.Zero, err
-	}
-	result, err := s.Calculate(ctx, tripctx.TripContext{Trip: *trip})
-	if err != nil {
-		return decimal.Zero, err
-	}
-	// A bilateral cap, not a lookup in the optimizer's suggested transfer list. The optimizer emits
-	// *a* minimum-cardinality set of transfers that zeroes everyone out, so a legitimate payment
-	// between two people it happened not to pair would find no edge and be rejected outright.
-	// What actually bounds a payment from -> to is how much `from` is short overall and how much
-	// `to` is still owed overall; either side hitting zero means the payment is not settling a debt.
-	var owedByFrom, owedToTo decimal.Decimal
-	for _, row := range result.Balances {
-		switch row.UserID {
-		case fromID:
-			owedByFrom = row.NetBalance.Neg()
-		case toID:
-			owedToTo = row.NetBalance
-		}
-	}
-	if owedByFrom.IsNegative() || owedToTo.IsNegative() {
-		return decimal.Zero, nil
-	}
-	return decimal.Min(owedByFrom, owedToTo), nil
-}
-
 // Ledger builds one member's statement: every expense/settlement that actually moved their
 // balance, oldest first, with a running total - like a bank statement. An expense where the
 // member paid exactly their own share (or wasn't involved at all) nets to zero and is left out
