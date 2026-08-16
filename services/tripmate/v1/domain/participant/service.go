@@ -37,7 +37,7 @@ type Service interface {
 	Join(context.Context, uuid.UUID, string) (*domainparticipant.Participant, error)
 	Add(context.Context, uuid.UUID, string, uuid.UUID) (*domainparticipant.Participant, error)
 	List(context.Context, uuid.UUID, string) ([]domainparticipant.Participant, error)
-	Update(context.Context, uuid.UUID, string, uuid.UUID, *domainparticipant.BankInfo, *domainparticipant.Role) (*domainparticipant.Participant, error)
+	Update(context.Context, uuid.UUID, string, uuid.UUID, *domainparticipant.BankInfo, *domainparticipant.Role, *string) (*domainparticipant.Participant, error)
 	Remove(context.Context, uuid.UUID, string, uuid.UUID) error
 	GetMembership(context.Context, uuid.UUID, uuid.UUID) (*domainparticipant.Participant, error)
 }
@@ -104,7 +104,7 @@ func (s *service) List(ctx context.Context, viewer uuid.UUID, code string) ([]do
 	}
 	return rows, nil
 }
-func (s *service) Update(ctx context.Context, actor uuid.UUID, code string, id uuid.UUID, bank *domainparticipant.BankInfo, role *domainparticipant.Role) (*domainparticipant.Participant, error) {
+func (s *service) Update(ctx context.Context, actor uuid.UUID, code string, id uuid.UUID, bank *domainparticipant.BankInfo, role *domainparticipant.Role, displayName *string) (*domainparticipant.Participant, error) {
 	t, member, err := s.memberTrip(ctx, actor, code)
 	if err != nil {
 		return nil, err
@@ -117,6 +117,9 @@ func (s *service) Update(ctx context.Context, actor uuid.UUID, code string, id u
 		return nil, apperror.New("PARTICIPANT_NOT_FOUND")
 	}
 	if bank != nil && actor != target.UserID && member.Role != domainparticipant.RolePlanner {
+		return nil, apperror.New("FORBIDDEN")
+	}
+	if displayName != nil && actor != target.UserID && member.Role != domainparticipant.RolePlanner {
 		return nil, apperror.New("FORBIDDEN")
 	}
 	if role != nil {
@@ -137,6 +140,14 @@ func (s *service) Update(ctx context.Context, actor uuid.UUID, code string, id u
 	if bank != nil {
 		bank.BankName = strings.TrimSpace(bank.BankName)
 		target.BankInfo = bank
+	}
+	if displayName != nil {
+		trimmed := strings.TrimSpace(*displayName)
+		if trimmed == "" {
+			target.DisplayName = nil
+		} else {
+			target.DisplayName = &trimmed
+		}
 	}
 	return s.repo.Update(ctx, target)
 }

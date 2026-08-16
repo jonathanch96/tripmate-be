@@ -15,6 +15,7 @@ import (
 	domainparticipant "github.com/jblabs/tripmate-be/services/tripmate/v1/entities/domain/participant"
 	"github.com/jblabs/tripmate-be/services/tripmate/v1/entities/event"
 	expenseevent "github.com/jblabs/tripmate-be/services/tripmate/v1/entities/event/expense"
+	"github.com/shopspring/decimal"
 )
 
 type service struct{ deps Dependencies }
@@ -43,6 +44,10 @@ func (s *service) Create(ctx context.Context, actor identity.Identity, tc tripct
 	if strings.TrimSpace(input.Description) == "" || len(strings.TrimSpace(input.Description)) > 255 {
 		return nil, apperror.WithFields("VALIDATION_FAILED", []apperror.FieldError{{Field: "description", Rule: "required", Message: "description is required"}})
 	}
+	chargedAmount, chargedCurrency, err := validateCharged(tc, input.ChargedAmount, input.ChargedCurrency)
+	if err != nil {
+		return nil, err
+	}
 	if err := ValidatePayers(input.Amount, input.Currency, input.Payers); err != nil {
 		return nil, err
 	}
@@ -69,6 +74,7 @@ func (s *service) Create(ctx context.Context, actor identity.Identity, tc tripct
 	now := s.deps.Clock().UTC()
 	entity := &domainexpense.Expense{ID: uuid.New(), TripID: tc.Trip.ID, CategoryID: input.CategoryID, ExpenseDate: date(input.ExpenseDate),
 		Description: strings.TrimSpace(input.Description), Amount: input.Amount, Currency: input.Currency,
+		ChargedAmount: chargedAmount, ChargedCurrency: chargedCurrency,
 		SplitType: input.SplitType, Status: status, Source: source(input.Source), Note: input.Note,
 		CreatedByUserID: actor.UserID, Version: 1, Payers: input.Payers, Splits: splits, CreatedAt: now, UpdatedAt: now}
 	err = s.deps.UOW.Do(ctx, func(txctx context.Context) error {
@@ -134,6 +140,15 @@ func (s *service) Update(ctx context.Context, actor identity.Identity, tc tripct
 			}
 			entity.CategoryID = input.CategoryID
 		}
+	}
+	if input.ClearCharged {
+		entity.ChargedAmount, entity.ChargedCurrency = nil, nil
+	} else if input.ChargedCurrency != nil {
+		chargedAmount, chargedCurrency, err := validateCharged(tc, input.ChargedAmount, input.ChargedCurrency)
+		if err != nil {
+			return nil, err
+		}
+		entity.ChargedAmount, entity.ChargedCurrency = chargedAmount, chargedCurrency
 	}
 	if !money.IsSupportedCurrency(entity.Currency) || !tc.Trip.AllowsCurrency(entity.Currency) {
 		return nil, apperror.New("INVALID_CURRENCY")
@@ -348,4 +363,21 @@ func source(value domainexpense.Source) domainexpense.Source {
 		return domainexpense.SourceManual
 	}
 	return value
+}
+
+// validateCharged normalizes and checks the optional "actually charged in" record. A currency-only
+// memo (no amount) is valid - the amount only strengthens it into a per-transaction rate. An amount
+// without a currency is rejected by the caller before this ever runs.
+func validateCharged(tc tripctx.TripContext, amount *decimal.Decimal, currency *string) (*decimal.Decimal, *string, error) {
+	if currency == nil {
+		return nil, nil, nil
+	}
+	code := strings.ToUpper(strings.TrimSpace(*currency))
+	if !money.IsSupportedCurrency(code) || !tc.Trip.AllowsCurrency(code) {
+		return nil, nil, apperror.New("INVALID_CURRENCY")
+	}
+	if amount != nil && !amount.IsPositive() {
+		return nil, nil, apperror.New("VALIDATION_FAILED")
+	}
+	return amount, &code, nil
 }

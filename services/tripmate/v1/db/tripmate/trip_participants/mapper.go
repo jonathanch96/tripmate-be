@@ -6,7 +6,7 @@ import (
 )
 
 func fromDomain(entity domainparticipant.Participant) Participant {
-	model := Participant{ID: entity.ID, TripID: entity.TripID, UserID: entity.UserID, Role: string(entity.Role), JoinedAt: entity.JoinedAt}
+	model := Participant{ID: entity.ID, TripID: entity.TripID, UserID: entity.UserID, Role: string(entity.Role), JoinedAt: entity.JoinedAt, DisplayName: entity.DisplayName}
 	if entity.BankInfo != nil {
 		model.BankName = &entity.BankInfo.BankName
 		model.BankAccountNumber = &entity.BankInfo.AccountNumber
@@ -16,7 +16,7 @@ func fromDomain(entity domainparticipant.Participant) Participant {
 }
 
 func toDomain(model Participant) domainparticipant.Participant {
-	entity := domainparticipant.Participant{ID: model.ID, TripID: model.TripID, UserID: model.UserID, Role: domainparticipant.Role(model.Role), JoinedAt: model.JoinedAt}
+	entity := domainparticipant.Participant{ID: model.ID, TripID: model.TripID, UserID: model.UserID, Role: domainparticipant.Role(model.Role), DisplayName: model.DisplayName, JoinedAt: model.JoinedAt}
 	if model.BankName != nil || model.BankAccountNumber != nil || model.BankAccountHolder != nil {
 		entity.BankInfo = &domainparticipant.BankInfo{}
 		if model.BankName != nil {

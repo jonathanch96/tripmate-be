@@ -19,8 +19,25 @@ type Participant struct {
 	ID, TripID, UserID uuid.UUID
 	Role               Role
 	BankInfo           *BankInfo
+	DisplayName        *string
 	JoinedAt           time.Time
 	User               *domainuser.PublicUser
+}
+
+// EffectiveName returns the per-trip nickname when set, falling back to the
+// member's real account name or email — used to tell apart participants who
+// share the same real name on a trip.
+func (p Participant) EffectiveName() string {
+	if p.DisplayName != nil && *p.DisplayName != "" {
+		return *p.DisplayName
+	}
+	if p.User != nil {
+		if p.User.Name != "" {
+			return p.User.Name
+		}
+		return p.User.Email
+	}
+	return ""
 }
 
 func MaskAccount(value string) string {

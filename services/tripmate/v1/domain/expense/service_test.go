@@ -248,6 +248,48 @@ func TestEveryMutationRejectsFinalizedTrip(t *testing.T) {
 	}
 }
 
+func TestChargedAmountRoundTripsAndClears(t *testing.T) {
+	svc, _, _, actor, tc, other := expenseFixture(false, domaintrip.EditOwnOnly, domainparticipant.RoleParticipant)
+	tc.Trip.Settings.MultiCurrencyEnabled = true
+	charged := decimal.RequireFromString("675000")
+	chargedCurrency := "IDR"
+	input := CreateInput{ExpenseDate: tc.Trip.StartDate, Description: "Dinner", Amount: decimal.NewFromInt(1500), Currency: "PHP",
+		ChargedAmount: &charged, ChargedCurrency: &chargedCurrency, SplitType: domainexpense.SplitEqual,
+		Payers: []domainexpense.Payer{{UserID: actor.UserID, Amount: decimal.NewFromInt(1500)}}, Participants: []uuid.UUID{actor.UserID, other}}
+	created, err := svc.Create(context.Background(), actor, tc, input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if created.ChargedAmount == nil || !created.ChargedAmount.Equal(charged) || created.ChargedCurrency == nil || *created.ChargedCurrency != "IDR" {
+		t.Fatalf("created charged fields = %+v %+v", created.ChargedAmount, created.ChargedCurrency)
+	}
+
+	// A currency-only memo (no amount) is a valid update.
+	newCurrency := "USD"
+	updated, err := svc.Update(context.Background(), actor, tc, created.ID, UpdateInput{ChargedCurrency: &newCurrency, Version: created.Version})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.ChargedAmount != nil || updated.ChargedCurrency == nil || *updated.ChargedCurrency != "USD" {
+		t.Fatalf("currency-only memo = %+v %+v", updated.ChargedAmount, updated.ChargedCurrency)
+	}
+
+	// ClearCharged wipes both fields back to nil.
+	cleared, err := svc.Update(context.Background(), actor, tc, created.ID, UpdateInput{ClearCharged: true, Version: updated.Version})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cleared.ChargedAmount != nil || cleared.ChargedCurrency != nil {
+		t.Fatalf("expected charged fields cleared, got %+v %+v", cleared.ChargedAmount, cleared.ChargedCurrency)
+	}
+
+	// An unsupported/disallowed charged currency is rejected the same way the base currency is.
+	badCurrency := "XXX"
+	if _, err = svc.Update(context.Background(), actor, tc, created.ID, UpdateInput{ChargedCurrency: &badCurrency, Version: cleared.Version}); !apperror.Is(err, "INVALID_CURRENCY") {
+		t.Fatalf("bad charged currency error = %v", err)
+	}
+}
+
 func TestEditingApprovedExpenseResetsApproval(t *testing.T) {
 	svc, repo, _, actor, tc, _ := expenseFixture(true, domaintrip.EditOwnOnly, domainparticipant.RoleParticipant)
 	approver := uuid.New()

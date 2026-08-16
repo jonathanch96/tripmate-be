@@ -15,6 +15,7 @@ type BankInfo struct {
 }
 
 type Update struct {
-	BankInfo *BankInfo `json:"bank_info"`
-	Role     *string   `json:"role" binding:"omitempty,oneof=planner participant"`
+	BankInfo    *BankInfo `json:"bank_info"`
+	Role        *string   `json:"role" binding:"omitempty,oneof=planner participant"`
+	DisplayName *string   `json:"display_name" binding:"omitempty,max=120"`
 }

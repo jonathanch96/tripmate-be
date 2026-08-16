@@ -70,7 +70,7 @@ func (a *adapterGormPostgresql) Update(ctx context.Context, entity *domainpartic
 	model := fromDomain(*entity)
 	if err := a.db.WithContext(ctx).Model(&Participant{}).Where("id = ?", entity.ID).Updates(map[string]any{
 		"role": model.Role, "bank_name": model.BankName, "bank_account_number": model.BankAccountNumber,
-		"bank_account_holder": model.BankAccountHolder, "updated_at": gorm.Expr("now()"),
+		"bank_account_holder": model.BankAccountHolder, "display_name": model.DisplayName, "updated_at": gorm.Expr("now()"),
 	}).Error; err != nil {
 		return nil, apperror.Wrap(err, "INTERNAL_ERROR")
 	}

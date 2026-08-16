@@ -110,6 +110,27 @@ func parseRows(payers []expenserequest.Payer, splits []expenserequest.Split, par
 	return resultPayers, manual, weights, ids, nil
 }
 
+// parseCharged turns the "actually charged in" fields into a domain amount/currency pair. A nil
+// currency means "not sent" and both returns are nil. On update, an explicit empty-string currency
+// is the caller's sentinel for "clear it" and reports clear=true.
+func parseCharged(currency, amount *string) (value *decimal.Decimal, code *string, clear bool, err error) {
+	if currency == nil || *currency == "" {
+		if amount != nil && *amount != "" {
+			return nil, nil, false, apperror.WithFields("VALIDATION_FAILED", []apperror.FieldError{{Field: "charged_currency", Rule: "required", Message: "charged_currency is required when charged_amount is set"}})
+		}
+		return nil, nil, currency != nil, nil
+	}
+	code = currency
+	if amount != nil && *amount != "" {
+		parsed, parseErr := decimal.NewFromString(*amount)
+		if parseErr != nil {
+			return nil, nil, false, apperror.New("VALIDATION_FAILED")
+		}
+		value = &parsed
+	}
+	return value, code, false, nil
+}
+
 // parseCategoryID follows the create/update convention of "omitted -> unchanged": nil means the
 // caller didn't send category_id at all. An explicit empty string is the sentinel for "clear the
 // category", represented downstream as a pointer to uuid.Nil.
@@ -176,8 +197,13 @@ func (c *controller) create(ctx *gin.Context) {
 		// A new expense with no category sent is simply uncategorized - there is nothing to "clear".
 		categoryID = nil
 	}
+	chargedAmount, chargedCurrency, _, err := parseCharged(req.ChargedCurrency, req.ChargedAmount)
+	if err != nil {
+		response.Error(ctx, err)
+		return
+	}
 	tc := tripContext(ctx)
-	entity, err := c.expenses.Create(ctx, actor(ctx), tc, expensedomain.CreateInput{ExpenseDate: date, Description: req.Description, Amount: amount, Currency: req.Currency, CategoryID: categoryID, SplitType: domainexpense.SplitType(req.SplitType), Payers: payers, Participants: participants, Manual: manual, Weights: weights, Note: req.Note})
+	entity, err := c.expenses.Create(ctx, actor(ctx), tc, expensedomain.CreateInput{ExpenseDate: date, Description: req.Description, Amount: amount, Currency: req.Currency, ChargedAmount: chargedAmount, ChargedCurrency: chargedCurrency, CategoryID: categoryID, SplitType: domainexpense.SplitType(req.SplitType), Payers: payers, Participants: participants, Manual: manual, Weights: weights, Note: req.Note})
 	if err != nil {
 		response.Error(ctx, err)
 		return
@@ -238,7 +264,12 @@ func (c *controller) update(ctx *gin.Context) {
 		response.Error(ctx, err)
 		return
 	}
-	input := expensedomain.UpdateInput{Description: req.Description, Currency: req.Currency, CategoryID: categoryID, Payers: payers, Participants: participants, Manual: manual, Weights: weights, Note: req.Note, Version: req.Version}
+	chargedAmount, chargedCurrency, clearCharged, err := parseCharged(req.ChargedCurrency, req.ChargedAmount)
+	if err != nil {
+		response.Error(ctx, err)
+		return
+	}
+	input := expensedomain.UpdateInput{Description: req.Description, Currency: req.Currency, ChargedAmount: chargedAmount, ChargedCurrency: chargedCurrency, ClearCharged: clearCharged, CategoryID: categoryID, Payers: payers, Participants: participants, Manual: manual, Weights: weights, Note: req.Note, Version: req.Version}
 	if req.ExpenseDate != nil {
 		value, parseErr := time.Parse("2006-01-02", *req.ExpenseDate)
 		if parseErr != nil {

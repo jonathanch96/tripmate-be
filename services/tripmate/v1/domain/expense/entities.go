@@ -22,15 +22,20 @@ type Filter struct {
 }
 
 type CreateInput struct {
-	ExpenseDate  time.Time
-	Description  string
-	Amount       decimal.Decimal
-	Currency     string
-	CategoryID   *uuid.UUID
-	SplitType    domainexpense.SplitType
-	Payers       []domainexpense.Payer
-	Participants []uuid.UUID
-	Manual       map[uuid.UUID]decimal.Decimal
+	ExpenseDate time.Time
+	Description string
+	Amount      decimal.Decimal
+	Currency    string
+	// ChargedAmount and ChargedCurrency are an optional record of what the payer's card or account
+	// actually showed, in a currency other than Currency. ChargedAmount is only read when
+	// ChargedCurrency is also set.
+	ChargedAmount   *decimal.Decimal
+	ChargedCurrency *string
+	CategoryID      *uuid.UUID
+	SplitType       domainexpense.SplitType
+	Payers          []domainexpense.Payer
+	Participants    []uuid.UUID
+	Manual          map[uuid.UUID]decimal.Decimal
 	// Weights carries percentages/shares for a percent/shares split. Only read for those split types.
 	Weights map[uuid.UUID]decimal.Decimal
 	Note    *string
@@ -54,7 +59,13 @@ type UpdateInput struct {
 	Manual       map[uuid.UUID]decimal.Decimal
 	Weights      map[uuid.UUID]decimal.Decimal
 	Note         *string
-	Version      int
+	// ChargedAmount and ChargedCurrency behave like CategoryID: nil means "leave unchanged", a
+	// non-nil ChargedCurrency sets both fields (ChargedAmount alongside it, which may itself be
+	// nil for a currency-only memo), and ClearCharged wipes both back to nil.
+	ChargedAmount   *decimal.Decimal
+	ChargedCurrency *string
+	ClearCharged    bool
+	Version         int
 }
 
 type Totals struct {

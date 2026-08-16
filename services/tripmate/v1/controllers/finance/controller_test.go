@@ -67,7 +67,7 @@ func (f fakeParts) Add(context.Context, uuid.UUID, string, uuid.UUID) (*domainpa
 func (f fakeParts) List(context.Context, uuid.UUID, string) ([]domainparticipant.Participant, error) {
 	return nil, nil
 }
-func (f fakeParts) Update(context.Context, uuid.UUID, string, uuid.UUID, *domainparticipant.BankInfo, *domainparticipant.Role) (*domainparticipant.Participant, error) {
+func (f fakeParts) Update(context.Context, uuid.UUID, string, uuid.UUID, *domainparticipant.BankInfo, *domainparticipant.Role, *string) (*domainparticipant.Participant, error) {
 	return nil, nil
 }
 func (f fakeParts) Remove(context.Context, uuid.UUID, string, uuid.UUID) error { return nil }

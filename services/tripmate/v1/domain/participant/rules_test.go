@@ -101,7 +101,7 @@ func TestUpdateCannotDemoteLastPlanner(t *testing.T) {
 	ctx := tripctx.WithContext(context.Background(), tripctx.TripContext{Trip: trip, Participant: membership})
 	nextRole := domainparticipant.RoleParticipant
 
-	_, err := NewService(repo, participantRulesTrips{}, nil).Update(ctx, actor, trip.Code, target.ID, nil, &nextRole)
+	_, err := NewService(repo, participantRulesTrips{}, nil).Update(ctx, actor, trip.Code, target.ID, nil, &nextRole, nil)
 	if !apperror.Is(err, "VALIDATION_FAILED") || repo.updated != nil {
 		t.Fatalf("Update() error = %v, updated = %+v", err, repo.updated)
 	}
@@ -126,18 +126,18 @@ func TestUpdateBankInfoAllowsOnlyOwnerOrPlanner(t *testing.T) {
 	repo := &participantRulesRepo{target: target}
 	member := domainparticipant.Participant{TripID: trip.ID, UserID: actor, Role: domainparticipant.RoleParticipant}
 	ctx := tripctx.WithContext(context.Background(), tripctx.TripContext{Trip: trip, Participant: member})
-	if _, err := NewService(repo, participantRulesTrips{}, nil).Update(ctx, actor, trip.Code, target.ID, bank, nil); !apperror.Is(err, "FORBIDDEN") {
+	if _, err := NewService(repo, participantRulesTrips{}, nil).Update(ctx, actor, trip.Code, target.ID, bank, nil, nil); !apperror.Is(err, "FORBIDDEN") {
 		t.Fatalf("Update(other participant) error = %v", err)
 	}
 	member.Role = domainparticipant.RolePlanner
 	ctx = tripctx.WithContext(context.Background(), tripctx.TripContext{Trip: trip, Participant: member})
-	if _, err := NewService(repo, participantRulesTrips{}, nil).Update(ctx, actor, trip.Code, target.ID, bank, nil); err != nil {
+	if _, err := NewService(repo, participantRulesTrips{}, nil).Update(ctx, actor, trip.Code, target.ID, bank, nil, nil); err != nil {
 		t.Fatalf("Update(planner) error = %v", err)
 	}
 	target.UserID = actor
 	member.Role = domainparticipant.RoleParticipant
 	ctx = tripctx.WithContext(context.Background(), tripctx.TripContext{Trip: trip, Participant: member})
-	if _, err := NewService(repo, participantRulesTrips{}, nil).Update(ctx, actor, trip.Code, target.ID, bank, nil); err != nil {
+	if _, err := NewService(repo, participantRulesTrips{}, nil).Update(ctx, actor, trip.Code, target.ID, bank, nil, nil); err != nil {
 		t.Fatalf("Update(owner) error = %v", err)
 	}
 }

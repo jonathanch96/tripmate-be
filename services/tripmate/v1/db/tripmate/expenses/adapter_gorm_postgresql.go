@@ -218,7 +218,8 @@ func (a *adapterGormPostgresql) Update(ctx context.Context, entity *domainexpens
 	model := fromDomain(*entity)
 	result := appdb.FromContext(ctx, a.db).WithContext(ctx).Model(&Expense{}).Where("id = ? AND version = ?", entity.ID, entity.Version).Updates(map[string]any{
 		"expense_date": model.ExpenseDate, "description": model.Description, "amount": model.Amount,
-		"currency": model.Currency, "category_id": model.CategoryID, "split_type": model.SplitType, "status": model.Status, "source": model.Source,
+		"currency": model.Currency, "charged_amount": model.ChargedAmount, "charged_currency": model.ChargedCurrency,
+		"category_id": model.CategoryID, "split_type": model.SplitType, "status": model.Status, "source": model.Source,
 		"note": model.Note, "approved_by_user_id": model.ApprovedByUserID, "approved_at": model.ApprovedAt,
 		"rejected_reason": model.RejectedReason, "version": gorm.Expr("version + 1"), "updated_at": gorm.Expr("now()"),
 	})

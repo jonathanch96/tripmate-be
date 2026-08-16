@@ -52,17 +52,22 @@ type Expense struct {
 	Description                 string
 	Amount                      decimal.Decimal
 	Currency                    string
-	SplitType                   SplitType
-	Status                      Status
-	Source                      Source
-	Note                        *string
-	ApprovedByUserID            *uuid.UUID
-	ApprovedAt                  *time.Time
-	RejectedReason              *string
-	Version                     int
-	Payers                      []Payer
-	Splits                      []Split
-	CreatedBy                   *domainuser.User
-	ApprovedBy                  *domainuser.User
-	CreatedAt, UpdatedAt        time.Time
+	// ChargedAmount and ChargedCurrency record what the payer's card or account actually showed,
+	// when that differs from Currency (the trip's base currency amount used for splitting). Both
+	// are nil unless the expense has one; ChargedAmount is only ever set alongside ChargedCurrency.
+	ChargedAmount        *decimal.Decimal
+	ChargedCurrency      *string
+	SplitType            SplitType
+	Status               Status
+	Source               Source
+	Note                 *string
+	ApprovedByUserID     *uuid.UUID
+	ApprovedAt           *time.Time
+	RejectedReason       *string
+	Version              int
+	Payers               []Payer
+	Splits               []Split
+	CreatedBy            *domainuser.User
+	ApprovedBy           *domainuser.User
+	CreatedAt, UpdatedAt time.Time
 }

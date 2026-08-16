@@ -53,7 +53,7 @@ func (*guardParticipantService) Add(context.Context, uuid.UUID, string, uuid.UUI
 func (*guardParticipantService) List(context.Context, uuid.UUID, string) ([]domainparticipant.Participant, error) {
 	panic("unexpected List")
 }
-func (*guardParticipantService) Update(context.Context, uuid.UUID, string, uuid.UUID, *domainparticipant.BankInfo, *domainparticipant.Role) (*domainparticipant.Participant, error) {
+func (*guardParticipantService) Update(context.Context, uuid.UUID, string, uuid.UUID, *domainparticipant.BankInfo, *domainparticipant.Role, *string) (*domainparticipant.Participant, error) {
 	panic("unexpected Update")
 }
 func (*guardParticipantService) Remove(context.Context, uuid.UUID, string, uuid.UUID) error {

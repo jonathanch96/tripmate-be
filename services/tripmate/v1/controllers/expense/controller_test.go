@@ -53,7 +53,7 @@ func (f controllerParts) Add(context.Context, uuid.UUID, string, uuid.UUID) (*do
 func (f controllerParts) List(context.Context, uuid.UUID, string) ([]domainparticipant.Participant, error) {
 	return nil, nil
 }
-func (f controllerParts) Update(context.Context, uuid.UUID, string, uuid.UUID, *domainparticipant.BankInfo, *domainparticipant.Role) (*domainparticipant.Participant, error) {
+func (f controllerParts) Update(context.Context, uuid.UUID, string, uuid.UUID, *domainparticipant.BankInfo, *domainparticipant.Role, *string) (*domainparticipant.Participant, error) {
 	return nil, nil
 }
 func (f controllerParts) Remove(context.Context, uuid.UUID, string, uuid.UUID) error { return nil }
@@ -146,6 +146,56 @@ func approvalRequest(t *testing.T, role domainparticipant.Role, suffix string, b
 	recorder := httptest.NewRecorder()
 	engine.ServeHTTP(recorder, request)
 	return recorder, expenses
+}
+
+func TestParseCharged(t *testing.T) {
+	str := func(v string) *string { return &v }
+	cases := []struct {
+		name             string
+		currency, amount *string
+		wantAmount       string
+		wantCurrency     string
+		wantClear        bool
+		wantErr          bool
+	}{
+		{name: "omitted means unchanged", currency: nil, amount: nil},
+		{name: "amount without currency is rejected", currency: nil, amount: str("100"), wantErr: true},
+		// An explicit empty currency always reports clear=true; create simply never sends one, so
+		// the create handler discards this return value rather than needing a separate case.
+		{name: "empty currency clears", currency: str(""), amount: nil, wantClear: true},
+		{name: "currency only is a valid memo", currency: str("IDR"), amount: nil, wantCurrency: "IDR"},
+		{name: "currency and amount together", currency: str("IDR"), amount: str("675000"), wantCurrency: "IDR", wantAmount: "675000"},
+		{name: "unparseable amount is rejected", currency: str("IDR"), amount: str("not-a-number"), wantErr: true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			value, code, clear, err := parseCharged(tc.currency, tc.amount)
+			if tc.wantErr {
+				if err == nil {
+					t.Fatalf("expected error")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if clear != tc.wantClear {
+				t.Fatalf("clear = %v, want %v", clear, tc.wantClear)
+			}
+			if tc.wantCurrency == "" && code != nil {
+				t.Fatalf("code = %v, want nil", *code)
+			}
+			if tc.wantCurrency != "" && (code == nil || *code != tc.wantCurrency) {
+				t.Fatalf("code = %v, want %s", code, tc.wantCurrency)
+			}
+			if tc.wantAmount == "" && value != nil {
+				t.Fatalf("value = %v, want nil", value)
+			}
+			if tc.wantAmount != "" && (value == nil || !value.Equal(decimal.RequireFromString(tc.wantAmount))) {
+				t.Fatalf("value = %v, want %s", value, tc.wantAmount)
+			}
+		})
+	}
 }
 
 func TestApproveAndRejectRoutesRequirePlanner(t *testing.T) {

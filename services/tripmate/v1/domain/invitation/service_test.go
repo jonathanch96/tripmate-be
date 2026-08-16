@@ -116,7 +116,7 @@ func (f invitationUserFinder) CreatePlaceholder(_ context.Context, email, name s
 func (*invitationParticipantServiceStub) List(context.Context, uuid.UUID, string) ([]domainparticipant.Participant, error) {
 	panic("unexpected List")
 }
-func (*invitationParticipantServiceStub) Update(context.Context, uuid.UUID, string, uuid.UUID, *domainparticipant.BankInfo, *domainparticipant.Role) (*domainparticipant.Participant, error) {
+func (*invitationParticipantServiceStub) Update(context.Context, uuid.UUID, string, uuid.UUID, *domainparticipant.BankInfo, *domainparticipant.Role, *string) (*domainparticipant.Participant, error) {
 	panic("unexpected Update")
 }
 func (*invitationParticipantServiceStub) Remove(context.Context, uuid.UUID, string, uuid.UUID) error {

@@ -15,6 +15,7 @@ type Participant struct {
 	BankName          *string   `gorm:"column:bank_name"`
 	BankAccountNumber *string   `gorm:"column:bank_account_number"`
 	BankAccountHolder *string   `gorm:"column:bank_account_holder"`
+	DisplayName       *string   `gorm:"column:display_name"`
 	JoinedAt          time.Time `gorm:"column:joined_at"`
 	CreatedAt         time.Time
 	UpdatedAt         time.Time
