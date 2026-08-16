@@ -11,6 +11,7 @@ import (
 type Filter struct {
 	PayerUserID *uuid.UUID
 	SplitUserID *uuid.UUID
+	CategoryID  *uuid.UUID
 	Status      *domainexpense.Status
 	Currency    string
 	DateFrom    *time.Time

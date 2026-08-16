@@ -416,6 +416,14 @@ func (c *controller) list(ctx *gin.Context) {
 		}
 		filter.SplitUserID = &id
 	}
+	if raw := ctx.Query("category_id"); raw != "" {
+		id, err := uuid.Parse(raw)
+		if err != nil {
+			response.Error(ctx, apperror.New("VALIDATION_FAILED"))
+			return
+		}
+		filter.CategoryID = &id
+	}
 	if raw := ctx.Query("status"); raw != "" {
 		value := domainexpense.Status(raw)
 		filter.Status = &value

@@ -145,6 +145,32 @@ func TestListByTripIDReturnsTotalsUsersAndUsesAtMostThreeQueries(t *testing.T) {
 	}
 }
 
+func TestListByTripIDFiltersByCategory(t *testing.T) {
+	db, ctx := expenseIntegrationDB(t), context.Background()
+	tripID, _, _ := seedExpenseList(t, db, 2)
+	rows, _, _, err := New(db).ListByTripID(ctx, tripID, expensedomain.Filter{Page: 1, PerPage: 20})
+	if err != nil || len(rows) != 2 {
+		t.Fatalf("ListByTripID() = %d, %v", len(rows), err)
+	}
+	food, transport := uuid.New(), uuid.New()
+	if err := db.Exec(`INSERT INTO tripmate.expense_categories (id, trip_id, name) VALUES (?,?,?),(?,?,?)`, food, tripID, "Food", transport, tripID, "Transport").Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Exec(`UPDATE tripmate.expenses SET category_id = ? WHERE id = ?`, food, rows[0].ID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Exec(`UPDATE tripmate.expenses SET category_id = ? WHERE id = ?`, transport, rows[1].ID).Error; err != nil {
+		t.Fatal(err)
+	}
+	filtered, total, _, err := New(db).ListByTripID(ctx, tripID, expensedomain.Filter{CategoryID: &food, Page: 1, PerPage: 20})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if total != 1 || len(filtered) != 1 || filtered[0].ID != rows[0].ID {
+		t.Fatalf("category-filtered list = %d/%d, want the single Food expense", len(filtered), total)
+	}
+}
+
 func TestSoftDeleteHidesExpenseAndKeepsAuditRows(t *testing.T) {
 	db, ctx := expenseIntegrationDB(t), context.Background()
 	tripID, plannerID, memberID := seedExpenseList(t, db, 1)

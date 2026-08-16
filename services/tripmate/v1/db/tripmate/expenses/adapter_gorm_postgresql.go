@@ -69,6 +69,10 @@ func (a *adapterGormPostgresql) ListByTripID(ctx context.Context, tripID uuid.UU
 		where = append(where, "EXISTS (SELECT 1 FROM tripmate.expense_splits s WHERE s.expense_id = e.id AND s.user_id = ?)")
 		args = append(args, *filter.SplitUserID)
 	}
+	if filter.CategoryID != nil {
+		where = append(where, "e.category_id = ?")
+		args = append(args, *filter.CategoryID)
+	}
 	if filter.Status != nil {
 		where = append(where, "e.status = ?")
 		args = append(args, *filter.Status)
