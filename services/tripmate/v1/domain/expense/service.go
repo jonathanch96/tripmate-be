@@ -48,6 +48,9 @@ func (s *service) Create(ctx context.Context, actor identity.Identity, tc tripct
 	if err != nil {
 		return nil, err
 	}
+	if err := validateChargedAgainstCurrency(chargedCurrency, input.Currency, tc.Trip.BaseCurrency); err != nil {
+		return nil, err
+	}
 	if err := ValidatePayers(input.Amount, input.Currency, input.Payers); err != nil {
 		return nil, err
 	}
@@ -148,10 +151,20 @@ func (s *service) Update(ctx context.Context, actor identity.Identity, tc tripct
 		if err != nil {
 			return nil, err
 		}
+		if err := validateChargedAgainstCurrency(chargedCurrency, entity.Currency, tc.Trip.BaseCurrency); err != nil {
+			return nil, err
+		}
 		entity.ChargedAmount, entity.ChargedCurrency = chargedAmount, chargedCurrency
 	}
 	if !money.IsSupportedCurrency(entity.Currency) || !tc.Trip.AllowsCurrency(entity.Currency) {
 		return nil, apperror.New("INVALID_CURRENCY")
+	}
+	// The expense's currency may have just changed to the trip's base currency (above) without the
+	// caller touching charged_currency at all - a stale charged override from before that change
+	// would otherwise linger and be silently ignored by balance calculation. Clear it here instead
+	// of leaving inconsistent data behind.
+	if entity.ChargedCurrency != nil && strings.EqualFold(entity.Currency, tc.Trip.BaseCurrency) {
+		entity.ChargedAmount, entity.ChargedCurrency = nil, nil
 	}
 	rowsChanged := input.Amount != nil || input.Currency != nil || input.SplitType != nil || input.Payers != nil || input.Participants != nil || input.Manual != nil || input.Weights != nil
 	if rowsChanged {
@@ -376,8 +389,23 @@ func validateCharged(tc tripctx.TripContext, amount *decimal.Decimal, currency *
 	if !money.IsSupportedCurrency(code) || !tc.Trip.AllowsCurrency(code) {
 		return nil, nil, apperror.New("INVALID_CURRENCY")
 	}
+	// Charged amount/currency is the authoritative per-transaction conversion (e.g. what a card
+	// statement actually shows) that overrides the trip's saved rate for this expense only - it
+	// only makes sense expressed in the trip's own base currency, never a third currency.
+	if !strings.EqualFold(code, tc.Trip.BaseCurrency) {
+		return nil, nil, apperror.WithFields("VALIDATION_FAILED", []apperror.FieldError{{Field: "charged_currency", Rule: "base_currency_only", Message: "charged currency must be the trip's base currency"}})
+	}
 	if amount != nil && !amount.IsPositive() {
 		return nil, nil, apperror.New("VALIDATION_FAILED")
 	}
 	return amount, &code, nil
+}
+
+// validateChargedAgainstCurrency rejects a charged amount/currency on an expense that is already
+// recorded in the trip's base currency, where a per-transaction override is meaningless.
+func validateChargedAgainstCurrency(chargedCurrency *string, expenseCurrency, tripBaseCurrency string) error {
+	if chargedCurrency != nil && strings.EqualFold(expenseCurrency, tripBaseCurrency) {
+		return apperror.WithFields("VALIDATION_FAILED", []apperror.FieldError{{Field: "charged_currency", Rule: "redundant", Message: "charged amount is not needed when the expense is already in the trip's base currency"}})
+	}
+	return nil
 }

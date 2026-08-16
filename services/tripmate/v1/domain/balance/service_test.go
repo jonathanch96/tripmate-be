@@ -101,6 +101,66 @@ func TestCalculateFiveHandComputedFixtures(t *testing.T) {
 	}
 }
 
+// chargedExpense builds an approved expense recorded in a foreign currency together with an
+// authoritative base-currency charged amount — the per-transaction rate override.
+func chargedExpense(currency string, amount int64, payer uuid.UUID, chargedAmount int64, baseCurrency string, splits []domainexpense.Split) domainexpense.Expense {
+	charged := decimal.NewFromInt(chargedAmount)
+	return domainexpense.Expense{Amount: decimal.NewFromInt(amount), Currency: currency, Status: domainexpense.StatusApproved,
+		ChargedAmount: &charged, ChargedCurrency: &baseCurrency,
+		Payers: []domainexpense.Payer{{UserID: payer, Amount: decimal.NewFromInt(amount)}}, Splits: splits}
+}
+
+func TestCalculateChargedAmountOverridesPerExpenseRate(t *testing.T) {
+	a, b := uuid.UUID{15: 1}, uuid.UUID{15: 2}
+	participants := []domainparticipant.Participant{participant(a, "Ana"), participant(b, "Ben")}
+	// 1500 THB paid by card, actually charged 840000 IDR — a per-transaction rate of 560, split
+	// evenly. No THB→IDR trip rate is configured at all, proving the override removes the need for
+	// one (validateRates must not demand it).
+	expense := chargedExpense("THB", 1500, a, 840000, "IDR", []domainexpense.Split{{UserID: a, Amount: decimal.NewFromInt(750)}, {UserID: b, Amount: decimal.NewFromInt(750)}})
+	service := balancedomain.NewService(balancedomain.Dependencies{Expenses: expenseRows{expense}, Settlements: settlementRows{}, Participants: participantRows(participants), FX: tableProvider{table: fxdomain.NewRateTable(nil)}})
+
+	result, err := service.Calculate(context.Background(), tripctx.TripContext{Trip: domaintrip.Trip{ID: uuid.New(), BaseCurrency: "IDR"}})
+	if err != nil {
+		t.Fatalf("Calculate() error = %v, want no error even without a configured THB→IDR rate", err)
+	}
+	if !result.Summary.TotalExpenses.Equal(decimal.NewFromInt(840000)) {
+		t.Fatalf("TotalExpenses = %s, want 840000 (the exact charged amount, not a re-derived figure)", result.Summary.TotalExpenses)
+	}
+	wantNet := map[uuid.UUID]string{a: "420000", b: "-420000"}
+	for _, row := range result.Balances {
+		if !row.NetBalance.Equal(decimal.RequireFromString(wantNet[row.UserID])) {
+			t.Fatalf("net[%s] = %s, want %s", row.UserID, row.NetBalance, wantNet[row.UserID])
+		}
+	}
+	if len(result.RatesUsed) != 0 {
+		t.Fatalf("RatesUsed = %+v, want empty — a per-expense override is not a trip-level rate", result.RatesUsed)
+	}
+}
+
+func TestCalculateChargedAmountOverrideCoexistsWithNormalForeignExpense(t *testing.T) {
+	a, b := uuid.UUID{15: 1}, uuid.UUID{15: 2}
+	participants := []domainparticipant.Participant{participant(a, "Ana"), participant(b, "Ben")}
+	// One THB expense with its own charged-amount override (no configured rate needed for it), plus
+	// one plain USD expense that does need — and has — a configured trip rate. Only the pair that's
+	// actually required (USD→IDR) should be enforced.
+	overridden := chargedExpense("THB", 1500, a, 840000, "IDR", []domainexpense.Split{{UserID: a, Amount: decimal.NewFromInt(1500)}})
+	plain := domainexpense.Expense{Amount: decimal.NewFromInt(10), Currency: "USD", Status: domainexpense.StatusApproved,
+		Payers: []domainexpense.Payer{{UserID: b, Amount: decimal.NewFromInt(10)}}, Splits: []domainexpense.Split{{UserID: b, Amount: decimal.NewFromInt(10)}}}
+	rates := []domainfx.Rate{{FromCurrency: "USD", ToCurrency: "IDR", Rate: decimal.NewFromInt(15000)}}
+	service := balancedomain.NewService(balancedomain.Dependencies{Expenses: expenseRows{overridden, plain}, Settlements: settlementRows{}, Participants: participantRows(participants), FX: tableProvider{table: fxdomain.NewRateTable(rates)}})
+
+	result, err := service.Calculate(context.Background(), tripctx.TripContext{Trip: domaintrip.Trip{ID: uuid.New(), BaseCurrency: "IDR"}})
+	if err != nil {
+		t.Fatalf("Calculate() error = %v", err)
+	}
+	if !result.Summary.TotalExpenses.Equal(decimal.NewFromInt(990000)) {
+		t.Fatalf("TotalExpenses = %s, want 990000 (840000 override + 150000 at the configured USD rate)", result.Summary.TotalExpenses)
+	}
+	if len(result.RatesUsed) != 1 || result.RatesUsed[0].From != "USD" {
+		t.Fatalf("RatesUsed = %+v, want only the USD→IDR trip rate", result.RatesUsed)
+	}
+}
+
 func TestCalculateListsEveryMissingCurrencyPair(t *testing.T) {
 	a, b := uuid.New(), uuid.New()
 	service := balancedomain.NewService(balancedomain.Dependencies{Expenses: expenseRows{

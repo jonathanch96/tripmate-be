@@ -25,6 +25,9 @@ type Trip struct {
 	Settings        Settings  `json:"settings"`
 	Version         int       `json:"version"`
 	CanEditSettings bool      `json:"can_edit_settings"`
+	// Currencies is only populated on the trip list endpoint - every currency actually used on the
+	// trip, base currency first. Omitted (not just empty) elsewhere.
+	Currencies []string `json:"currencies,omitempty"`
 }
 
 func FromDomain(entity domaintrip.Trip, canEditSettings bool) Trip {
@@ -32,7 +35,7 @@ func FromDomain(entity domaintrip.Trip, canEditSettings bool) Trip {
 		ID: entity.ID, Code: entity.Code, Name: entity.Name, BaseCurrency: entity.BaseCurrency,
 		StartDate: entity.StartDate.Format("2006-01-02"), EndDate: entity.EndDate.Format("2006-01-02"),
 		PlannerID: entity.PlannerID, IsFinalized: entity.IsFinalized, Version: entity.Version,
-		CanEditSettings: canEditSettings,
+		CanEditSettings: canEditSettings, Currencies: entity.Currencies,
 		Settings: Settings{
 			EditPermission:              string(entity.Settings.EditPermission),
 			ApprovalRequiredExpenses:    entity.Settings.ApprovalRequiredExpenses,

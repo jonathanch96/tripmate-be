@@ -29,6 +29,10 @@ type Trip struct {
 	Settings                 Settings
 	Version                  int
 	CreatedAt, UpdatedAt     time.Time
+	// Currencies is every currency actually used on the trip (base currency plus whatever its
+	// expenses are recorded in). Only populated by the trip list query, for the "My trips" cards -
+	// nil elsewhere.
+	Currencies []string
 }
 
 func (t Trip) HasEnded(now time.Time) bool {

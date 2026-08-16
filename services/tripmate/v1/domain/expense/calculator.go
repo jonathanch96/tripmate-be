@@ -106,16 +106,25 @@ func splitByShares(input SplitInput) ([]domainexpense.Split, error) {
 	return weightedSplits(input, participants, weights), nil
 }
 
+// sortedWeights accepts a zero weight - it just means that participant sits out this particular
+// expense (e.g. they weren't there) while still being listed - but rejects negative weights and
+// requires at least one participant with a positive weight, since an all-zero split has nothing to
+// allocate.
 func sortedWeights(weights map[uuid.UUID]decimal.Decimal) ([]uuid.UUID, []decimal.Decimal, error) {
 	if len(weights) == 0 {
 		return nil, nil, apperror.New("VALIDATION_FAILED")
 	}
 	participants := make([]uuid.UUID, 0, len(weights))
+	total := decimal.Zero
 	for userID, weight := range weights {
-		if !weight.IsPositive() {
+		if weight.IsNegative() {
 			return nil, nil, apperror.New("VALIDATION_FAILED")
 		}
+		total = total.Add(weight)
 		participants = append(participants, userID)
+	}
+	if !total.IsPositive() {
+		return nil, nil, apperror.New("VALIDATION_FAILED")
 	}
 	sort.Slice(participants, func(i, j int) bool { return participants[i].String() < participants[j].String() })
 	values := make([]decimal.Decimal, len(participants))

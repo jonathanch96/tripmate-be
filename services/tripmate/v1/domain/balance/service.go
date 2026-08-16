@@ -68,14 +68,30 @@ func (s *service) Calculate(ctx context.Context, tc tripctx.TripContext) (*domai
 			continue
 		}
 		summary.ExpenseCount++
-		converted, convertErr := table.Convert(expense.Amount, expense.Currency, tc.Trip.BaseCurrency)
+		// A base-currency charged amount (e.g. what a card statement actually showed) is the
+		// authoritative conversion for this one expense - it overrides the trip's saved rate rather
+		// than requiring one, and never touches any other expense.
+		overrideRate, hasOverride := chargedOverrideRate(expense, tc.Trip.BaseCurrency)
+		convert := func(amount decimal.Decimal) (decimal.Decimal, error) {
+			if hasOverride {
+				return amount.Mul(overrideRate), nil
+			}
+			return table.Convert(amount, expense.Currency, tc.Trip.BaseCurrency)
+		}
+		converted, convertErr := convert(expense.Amount)
 		if convertErr != nil {
 			return nil, convertErr
 		}
+		if hasOverride {
+			// Use the exact entered total rather than the re-derived (amount * overrideRate) figure,
+			// which can drift from it by a rounding fraction at the 12-decimal-place rate precision.
+			converted = *expense.ChargedAmount
+		} else {
+			rememberRate(used, table, expense.Currency, tc.Trip.BaseCurrency)
+		}
 		summary.TotalExpenses = summary.TotalExpenses.Add(converted)
-		rememberRate(used, table, expense.Currency, tc.Trip.BaseCurrency)
 		for _, payer := range expense.Payers {
-			amount, convertErr := table.Convert(payer.Amount, expense.Currency, tc.Trip.BaseCurrency)
+			amount, convertErr := convert(payer.Amount)
 			if convertErr != nil {
 				return nil, convertErr
 			}
@@ -84,7 +100,7 @@ func (s *service) Calculate(ctx context.Context, tc tripctx.TripContext) (*domai
 			byUser[payer.UserID] = row
 		}
 		for _, split := range expense.Splits {
-			amount, convertErr := table.Convert(split.Amount, expense.Currency, tc.Trip.BaseCurrency)
+			amount, convertErr := convert(split.Amount)
 			if convertErr != nil {
 				return nil, convertErr
 			}
@@ -216,12 +232,31 @@ func (s *service) FinalSettlement(ctx context.Context, tc tripctx.TripContext) (
 	return &domainbalance.FinalPlan{BaseCurrency: result.BaseCurrency, Transfers: transfers}, nil
 }
 
+// chargedOverrideRate returns the per-transaction conversion rate for an expense carrying an
+// authoritative base-currency charged amount, and whether one applies. A charged currency other
+// than the trip's base is never persisted (enforced at write time), so this only needs to guard
+// against a nil/zero amount.
+func chargedOverrideRate(expense domainexpense.Expense, tripBaseCurrency string) (decimal.Decimal, bool) {
+	if expense.ChargedAmount == nil || expense.ChargedCurrency == nil {
+		return decimal.Zero, false
+	}
+	if !strings.EqualFold(*expense.ChargedCurrency, tripBaseCurrency) || expense.Amount.IsZero() {
+		return decimal.Zero, false
+	}
+	return expense.ChargedAmount.DivRound(expense.Amount, 12), true
+}
+
 func validateRates(table *fxdomain.RateTable, trip domaintrip.Trip, expenses []domainexpense.Expense, settlements []domainsettlement.Settlement) error {
 	pairs := make(map[string]struct{})
 	for _, expense := range expenses {
-		if expense.Status == domainexpense.StatusApproved && !strings.EqualFold(expense.Currency, trip.BaseCurrency) {
-			pairs[strings.ToUpper(expense.Currency)+"→"+strings.ToUpper(trip.BaseCurrency)] = struct{}{}
+		if expense.Status != domainexpense.StatusApproved || strings.EqualFold(expense.Currency, trip.BaseCurrency) {
+			continue
 		}
+		if _, hasOverride := chargedOverrideRate(expense, trip.BaseCurrency); hasOverride {
+			// This expense carries its own per-transaction rate, so no trip-level rate is required.
+			continue
+		}
+		pairs[strings.ToUpper(expense.Currency)+"→"+strings.ToUpper(trip.BaseCurrency)] = struct{}{}
 	}
 	for _, settlement := range settlements {
 		if settlement.Status == domainsettlement.StatusApproved && !strings.EqualFold(settlement.Currency, trip.BaseCurrency) {

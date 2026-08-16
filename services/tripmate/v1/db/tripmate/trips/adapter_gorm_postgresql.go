@@ -3,6 +3,8 @@ package trips
 import (
 	"context"
 	"errors"
+	"sort"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jblabs/tripmate-be/pkg/apperror"
@@ -86,10 +88,50 @@ func (a *adapterGormPostgresql) ListByUserID(ctx context.Context, userID uuid.UU
 		return nil, 0, apperror.Wrap(err, "INTERNAL_ERROR")
 	}
 	result := make([]domaintrip.Trip, len(models))
+	ids := make([]uuid.UUID, len(models))
 	for index, model := range models {
 		result[index] = toDomain(model)
+		ids[index] = model.ID
+	}
+	if len(ids) > 0 {
+		type currencyRow struct {
+			TripID   uuid.UUID
+			Currency string
+		}
+		var rows []currencyRow
+		if err := a.db.WithContext(ctx).Table("tripmate.expenses").
+			Select("DISTINCT trip_id, currency").
+			Where("trip_id IN ? AND deleted_at IS NULL", ids).
+			Find(&rows).Error; err != nil {
+			return nil, 0, apperror.Wrap(err, "INTERNAL_ERROR")
+		}
+		usedByTrip := make(map[uuid.UUID][]string, len(ids))
+		for _, row := range rows {
+			usedByTrip[row.TripID] = append(usedByTrip[row.TripID], row.Currency)
+		}
+		for index := range result {
+			result[index].Currencies = mergeCurrencies(result[index].BaseCurrency, usedByTrip[result[index].ID])
+		}
 	}
 	return result, total, nil
+}
+
+// mergeCurrencies puts the trip's base currency first (shown even before any expense has been
+// recorded in it) followed by every other currency actually used, deduplicated and sorted.
+func mergeCurrencies(base string, used []string) []string {
+	base = strings.ToUpper(base)
+	sort.Strings(used)
+	result := []string{base}
+	seen := map[string]bool{base: true}
+	for _, code := range used {
+		code = strings.ToUpper(code)
+		if seen[code] {
+			continue
+		}
+		seen[code] = true
+		result = append(result, code)
+	}
+	return result
 }
 
 func (a *adapterGormPostgresql) Update(ctx context.Context, entity *domaintrip.Trip) (*domaintrip.Trip, error) {

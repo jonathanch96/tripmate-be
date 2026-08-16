@@ -248,30 +248,33 @@ func TestEveryMutationRejectsFinalizedTrip(t *testing.T) {
 	}
 }
 
+// TestChargedAmountRoundTripsAndClears covers the card-FX scenario: an expense recorded in a
+// foreign currency (THB) with a per-transaction charged amount in the trip's base currency (PHP)
+// that overrides the trip's saved rate for that expense alone.
 func TestChargedAmountRoundTripsAndClears(t *testing.T) {
 	svc, _, _, actor, tc, other := expenseFixture(false, domaintrip.EditOwnOnly, domainparticipant.RoleParticipant)
 	tc.Trip.Settings.MultiCurrencyEnabled = true
-	charged := decimal.RequireFromString("675000")
-	chargedCurrency := "IDR"
-	input := CreateInput{ExpenseDate: tc.Trip.StartDate, Description: "Dinner", Amount: decimal.NewFromInt(1500), Currency: "PHP",
-		ChargedAmount: &charged, ChargedCurrency: &chargedCurrency, SplitType: domainexpense.SplitEqual,
+	charged := decimal.RequireFromString("84000")
+	baseCurrency := "PHP"
+	input := CreateInput{ExpenseDate: tc.Trip.StartDate, Description: "Dinner", Amount: decimal.NewFromInt(1500), Currency: "THB",
+		ChargedAmount: &charged, ChargedCurrency: &baseCurrency, SplitType: domainexpense.SplitEqual,
 		Payers: []domainexpense.Payer{{UserID: actor.UserID, Amount: decimal.NewFromInt(1500)}}, Participants: []uuid.UUID{actor.UserID, other}}
 	created, err := svc.Create(context.Background(), actor, tc, input)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if created.ChargedAmount == nil || !created.ChargedAmount.Equal(charged) || created.ChargedCurrency == nil || *created.ChargedCurrency != "IDR" {
+	if created.ChargedAmount == nil || !created.ChargedAmount.Equal(charged) || created.ChargedCurrency == nil || *created.ChargedCurrency != "PHP" {
 		t.Fatalf("created charged fields = %+v %+v", created.ChargedAmount, created.ChargedCurrency)
 	}
 
-	// A currency-only memo (no amount) is a valid update.
-	newCurrency := "USD"
-	updated, err := svc.Update(context.Background(), actor, tc, created.ID, UpdateInput{ChargedCurrency: &newCurrency, Version: created.Version})
+	// The charged amount alone can be corrected without touching anything else.
+	newCharged := decimal.RequireFromString("85000")
+	updated, err := svc.Update(context.Background(), actor, tc, created.ID, UpdateInput{ChargedAmount: &newCharged, ChargedCurrency: &baseCurrency, Version: created.Version})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if updated.ChargedAmount != nil || updated.ChargedCurrency == nil || *updated.ChargedCurrency != "USD" {
-		t.Fatalf("currency-only memo = %+v %+v", updated.ChargedAmount, updated.ChargedCurrency)
+	if updated.ChargedAmount == nil || !updated.ChargedAmount.Equal(newCharged) {
+		t.Fatalf("updated charged amount = %+v", updated.ChargedAmount)
 	}
 
 	// ClearCharged wipes both fields back to nil.
@@ -283,10 +286,51 @@ func TestChargedAmountRoundTripsAndClears(t *testing.T) {
 		t.Fatalf("expected charged fields cleared, got %+v %+v", cleared.ChargedAmount, cleared.ChargedCurrency)
 	}
 
-	// An unsupported/disallowed charged currency is rejected the same way the base currency is.
+	// A charged currency other than the trip's base currency is rejected — it's meant to be the
+	// authoritative base-currency conversion for this transaction, not an arbitrary third currency.
+	foreignCurrency := "USD"
+	if _, err = svc.Update(context.Background(), actor, tc, created.ID, UpdateInput{ChargedCurrency: &foreignCurrency, Version: cleared.Version}); !apperror.Is(err, "VALIDATION_FAILED") {
+		t.Fatalf("non-base charged currency error = %v", err)
+	}
+
+	// An unsupported/disallowed charged currency is still rejected the same way the base currency is.
 	badCurrency := "XXX"
 	if _, err = svc.Update(context.Background(), actor, tc, created.ID, UpdateInput{ChargedCurrency: &badCurrency, Version: cleared.Version}); !apperror.Is(err, "INVALID_CURRENCY") {
 		t.Fatalf("bad charged currency error = %v", err)
+	}
+}
+
+// TestChargedAmountRejectedWhenExpenseAlreadyInBaseCurrency covers the "already in base currency"
+// scenario (e.g. booked directly in IDR via trip.com): a charged-amount override is meaningless
+// there and must be rejected, both on create and when an update would leave that combination.
+func TestChargedAmountRejectedWhenExpenseAlreadyInBaseCurrency(t *testing.T) {
+	svc, _, _, actor, tc, other := expenseFixture(false, domaintrip.EditOwnOnly, domainparticipant.RoleParticipant)
+	tc.Trip.Settings.MultiCurrencyEnabled = true
+	charged := decimal.NewFromInt(1500000)
+	baseCurrency := "PHP"
+	input := CreateInput{ExpenseDate: tc.Trip.StartDate, Description: "Trip.com booking", Amount: decimal.NewFromInt(1500000), Currency: "PHP",
+		ChargedAmount: &charged, ChargedCurrency: &baseCurrency, SplitType: domainexpense.SplitEqual,
+		Payers: []domainexpense.Payer{{UserID: actor.UserID, Amount: decimal.NewFromInt(1500000)}}, Participants: []uuid.UUID{actor.UserID, other}}
+	if _, err := svc.Create(context.Background(), actor, tc, input); !apperror.Is(err, "VALIDATION_FAILED") {
+		t.Fatalf("create with redundant charged amount error = %v", err)
+	}
+
+	// Changing an expense's currency to base without explicitly clearing an existing charged
+	// override must not silently leave stale, now-meaningless charged data behind.
+	created, err := svc.Create(context.Background(), actor, tc, CreateInput{ExpenseDate: tc.Trip.StartDate, Description: "Dinner", Amount: decimal.NewFromInt(1500), Currency: "THB",
+		ChargedAmount: &charged, ChargedCurrency: &baseCurrency, SplitType: domainexpense.SplitEqual,
+		Payers: []domainexpense.Payer{{UserID: actor.UserID, Amount: decimal.NewFromInt(1500)}}, Participants: []uuid.UUID{actor.UserID, other}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	newCurrency, newAmount := "PHP", decimal.NewFromInt(1500000)
+	switched, err := svc.Update(context.Background(), actor, tc, created.ID, UpdateInput{Currency: &newCurrency, Amount: &newAmount, Version: created.Version,
+		Payers: []domainexpense.Payer{{UserID: actor.UserID, Amount: newAmount}}, Participants: []uuid.UUID{actor.UserID, other}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if switched.ChargedAmount != nil || switched.ChargedCurrency != nil {
+		t.Fatalf("expected stale charged override to be cleared once currency switched to base, got %+v %+v", switched.ChargedAmount, switched.ChargedCurrency)
 	}
 }
 
