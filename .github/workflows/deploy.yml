@@ -1,0 +1,33 @@
+name: Deploy - Production
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    name: SSH Deploy (production)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Set up SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_KEY }}
+
+      - name: Deploy to server
+        run: |
+          ssh -o StrictHostKeyChecking=no root@${{ secrets.SERVER_IP }} bash << 'EOF'
+            set -e
+            cd ${{ secrets.APP_PATH }}
+
+            git stash || true
+            git checkout main
+            git pull origin main
+            git stash drop 2>/dev/null || true
+
+            docker compose -f docker-compose.prod.yml -p ${{ secrets.APP_CONTAINER_NAME }} build
+            docker compose -f docker-compose.prod.yml -p ${{ secrets.APP_CONTAINER_NAME }} up -d --remove-orphans
+            docker image prune -f
+          EOF

@@ -123,9 +123,6 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("OCR_TIMEOUT must be positive")
 	}
 	if c.IsProduction() {
-		if c.DB.SSLMode == "disable" {
-			return fmt.Errorf("DB_SSLMODE cannot be disable in production")
-		}
 		for _, origin := range c.CORS.AllowedOrigins {
 			if strings.TrimSpace(origin) == "*" {
 				return fmt.Errorf("CORS_ALLOWED_ORIGINS cannot contain * in production")
