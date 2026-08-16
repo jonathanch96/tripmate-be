@@ -77,6 +77,7 @@ func (f *fakeRepo) SetPasswordHash(_ context.Context, id uuid.UUID, hash string)
 	}
 	return apperror.New("USER_NOT_FOUND")
 }
+
 // Update mirrors the real adapter: it only ever touches name/avatar_url, so a caller can't
 // accidentally clobber password_hash/google_id by passing a stale copy of the row.
 func (f *fakeRepo) Update(_ context.Context, u *domainuser.User) (*domainuser.User, error) {

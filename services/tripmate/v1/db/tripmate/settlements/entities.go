@@ -1,10 +1,11 @@
 package settlements
 
 import (
+	"time"
+
 	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
-	"time"
 )
 
 type Settlement struct {

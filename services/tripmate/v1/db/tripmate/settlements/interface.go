@@ -2,6 +2,7 @@ package settlements
 
 import (
 	"context"
+
 	"github.com/google/uuid"
 	balancedomain "github.com/jblabs/tripmate-be/services/tripmate/v1/domain/balance"
 	settlementdomain "github.com/jblabs/tripmate-be/services/tripmate/v1/domain/settlement"

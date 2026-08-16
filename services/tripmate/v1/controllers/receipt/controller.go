@@ -90,7 +90,7 @@ func (c *controller) upload(ctx *gin.Context) {
 		response.Error(ctx, apperror.New("VALIDATION_FAILED"))
 		return
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 	data, err := io.ReadAll(io.LimitReader(file, storage.MaxImageBytes+1))
 	if err != nil {
 		response.Error(ctx, apperror.Wrap(err, "INTERNAL_ERROR"))

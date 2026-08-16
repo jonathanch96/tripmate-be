@@ -24,7 +24,8 @@ func TestRateLimitCountsEachKeyAndReturnsRetryAfter(t *testing.T) {
 		router.ServeHTTP(recorder, req)
 		return recorder
 	}
-	if request("a").Code != 204 || request("a").Code != 204 || request("b").Code != 204 {
+	firstA, secondA, firstB := request("a"), request("a"), request("b")
+	if firstA.Code != 204 || secondA.Code != 204 || firstB.Code != 204 {
 		t.Fatal("independent keys should have independent capacity")
 	}
 	limited := request("a")

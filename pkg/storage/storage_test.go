@@ -219,7 +219,7 @@ func TestFilesystemRoundTripsAndExpiresItsLinks(t *testing.T) {
 		t.Fatal(err)
 	}
 	stored, err := io.ReadAll(reader)
-	reader.Close()
+	_ = reader.Close()
 	if err != nil || !bytes.Equal(stored, data) {
 		t.Fatalf("stored bytes differ from what was written (err %v)", err)
 	}

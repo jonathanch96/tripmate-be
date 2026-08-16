@@ -115,7 +115,7 @@ func (v *Verifier) fetchKeys(ctx context.Context) (map[string]*rsa.PublicKey, er
 	if err != nil {
 		return nil, fmt.Errorf("fetch google jwks: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("fetch google jwks: unexpected status %d", resp.StatusCode)
 	}

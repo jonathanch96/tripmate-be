@@ -92,7 +92,7 @@ func registerRoutes(engine *gin.Engine, cfg *config.Config, db *gorm.DB, log *sl
 				c.Status(http.StatusForbidden)
 				return
 			}
-			defer file.Close()
+			defer func() { _ = file.Close() }()
 			contentType := "image/jpeg"
 			if strings.HasSuffix(key, ".png") {
 				contentType = "image/png"

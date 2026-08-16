@@ -110,13 +110,13 @@ func (f *fakeBalances) FinalSettlement(context.Context, tripctx.TripContext) (*d
 }
 
 type fakeSettlements struct {
-	err                              error
-	records, approvals, rejections   int
-	deletes                          int
-	lastFilter                       settlementdomain.Filter
-	lastInput                        settlementdomain.RecordInput
-	lastReason                       string
-	statusOnRecord, statusOnApproval domainsettlement.Status
+	err                            error
+	records, approvals, rejections int
+	deletes                        int
+	lastFilter                     settlementdomain.Filter
+	lastInput                      settlementdomain.RecordInput
+	lastReason                     string
+	statusOnRecord                 domainsettlement.Status
 }
 
 func (f *fakeSettlements) row(status domainsettlement.Status) *domainsettlement.Settlement {
@@ -202,7 +202,6 @@ func (f *fakeFX) ListGlobal(context.Context) ([]domainfx.Rate, error) {
 }
 
 type fakeFinal struct {
-	err                       error
 	finalizes, unfinalizes    int
 	balances                  *fakeBalances
 	finalizeErr, unfinalizErr error

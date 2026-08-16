@@ -217,7 +217,7 @@ func (p *Provider) call(ctx context.Context, body []byte) ([]byte, error) {
 		}
 		return nil, apperror.Newf("OCR_PROVIDER_ERROR", "the receipt provider could not be reached")
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	payload, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
 	if err != nil {
 		return nil, apperror.Newf("OCR_PROVIDER_ERROR", "the receipt provider response could not be read")

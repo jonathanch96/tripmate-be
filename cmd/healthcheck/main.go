@@ -27,7 +27,7 @@ func main() {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
-	defer response.Body.Close()
+	defer func() { _ = response.Body.Close() }()
 	if response.StatusCode != http.StatusOK {
 		fmt.Fprintf(os.Stderr, "readiness returned %s\n", response.Status)
 		os.Exit(1)

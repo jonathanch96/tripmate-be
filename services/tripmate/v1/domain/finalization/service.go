@@ -3,6 +3,8 @@ package finalization
 import (
 	"context"
 	"encoding/json"
+	"time"
+
 	"github.com/google/uuid"
 	"github.com/jblabs/tripmate-be/pkg/apperror"
 	"github.com/jblabs/tripmate-be/pkg/identity"
@@ -11,7 +13,6 @@ import (
 	domainbalance "github.com/jblabs/tripmate-be/services/tripmate/v1/entities/domain/balance"
 	domainparticipant "github.com/jblabs/tripmate-be/services/tripmate/v1/entities/domain/participant"
 	"github.com/jblabs/tripmate-be/services/tripmate/v1/entities/event"
-	"time"
 )
 
 type BalanceService interface {

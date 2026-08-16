@@ -83,7 +83,7 @@ func (s *S3) Get(ctx context.Context, key string) ([]byte, error) {
 	if err != nil {
 		return nil, apperror.Wrap(err, "INTERNAL_ERROR")
 	}
-	defer object.Close()
+	defer func() { _ = object.Close() }()
 	data, err := io.ReadAll(object)
 	if err != nil {
 		return nil, apperror.New("RECEIPT_NOT_FOUND")

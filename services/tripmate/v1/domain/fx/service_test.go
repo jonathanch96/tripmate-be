@@ -28,6 +28,7 @@ func (r *repoStub) ListEffective(context.Context, uuid.UUID) ([]domainfx.Rate, e
 func (r *repoStub) Get(context.Context, *uuid.UUID, string, string) (*domainfx.Rate, error) {
 	return nil, nil
 }
+
 // Rows are keyed the way the real unique indexes are: trip-scoped and global rates for the same
 // direction are separate rows.
 func sameSlot(a, b domainfx.Rate) bool {

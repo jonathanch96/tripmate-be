@@ -42,8 +42,11 @@ func (f *Filesystem) Put(_ context.Context, key string, r io.Reader, _ int64, _ 
 	if err != nil {
 		return apperror.Wrap(err, "INTERNAL_ERROR")
 	}
-	defer file.Close()
 	if _, err = io.Copy(file, r); err != nil {
+		_ = file.Close()
+		return apperror.Wrap(err, "INTERNAL_ERROR")
+	}
+	if err = file.Close(); err != nil {
 		return apperror.Wrap(err, "INTERNAL_ERROR")
 	}
 	return nil

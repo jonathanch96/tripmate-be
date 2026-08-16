@@ -106,8 +106,7 @@ func stripWebP(data []byte) []byte {
 		if size < 0 || index+8+padded > len(data) {
 			break
 		}
-		kind := string(data[index : index+4])
-		if !dropped[kind] {
+		if !dropped[string(data[index:index+4])] {
 			body = append(body, data[index:index+8+padded]...)
 		}
 		index += 8 + padded

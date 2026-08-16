@@ -30,7 +30,7 @@ func main() {
 	if err != nil {
 		fatal(fmt.Errorf("create migrator: %w", err))
 	}
-	defer migrator.Close()
+	defer func() { _, _ = migrator.Close() }()
 
 	if err := migrator.Up(); err != nil && !errors.Is(err, migrate.ErrNoChange) {
 		fatal(fmt.Errorf("apply migrations: %w", err))
@@ -42,7 +42,7 @@ func waitForDatabase(databaseURL string, timeout time.Duration) error {
 	if err != nil {
 		return fmt.Errorf("open database: %w", err)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()

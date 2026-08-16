@@ -3,6 +3,7 @@ package settlements
 import (
 	"context"
 	"errors"
+
 	"github.com/google/uuid"
 	"github.com/jblabs/tripmate-be/pkg/apperror"
 	appdb "github.com/jblabs/tripmate-be/services/tripmate/v1/db"

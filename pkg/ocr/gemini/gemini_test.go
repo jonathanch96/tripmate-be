@@ -44,7 +44,7 @@ func TestExtractSendsTheImageAndReadsTheItemsBack(t *testing.T) {
 	provider, _ := newTestProvider(t, func(w http.ResponseWriter, r *http.Request) {
 		gotBody, _ = io.ReadAll(r.Body)
 		gotPath, gotKey = r.URL.Path, r.Header.Get("x-goog-api-key")
-		fmt.Fprint(w, geminiReply(`{"merchant":"Cafe","currency":"USD","lineItems":[{"name":"Tea","quantity":"1","unitPrice":"3.50","totalPrice":"3.50"}],"tax":"0.50","serviceCharge":"0","total":"4.00"}`))
+		_, _ = fmt.Fprint(w, geminiReply(`{"merchant":"Cafe","currency":"USD","lineItems":[{"name":"Tea","quantity":"1","unitPrice":"3.50","totalPrice":"3.50"}],"tax":"0.50","serviceCharge":"0","total":"4.00"}`))
 	})
 
 	result, err := provider.Extract(context.Background(), image())
@@ -81,7 +81,7 @@ func TestExtractRetriesOnceOnServerError(t *testing.T) {
 			w.WriteHeader(http.StatusBadGateway)
 			return
 		}
-		fmt.Fprint(w, geminiReply(`{"merchant":"Second Try","currency":"USD","lineItems":[{"name":"Tea","quantity":"1","unitPrice":"3","totalPrice":"3"}],"total":"3"}`))
+		_, _ = fmt.Fprint(w, geminiReply(`{"merchant":"Second Try","currency":"USD","lineItems":[{"name":"Tea","quantity":"1","unitPrice":"3","totalPrice":"3"}],"total":"3"}`))
 	})
 
 	result, err := provider.Extract(context.Background(), image())
@@ -137,7 +137,7 @@ func TestExtractReportsUnparseableSeparatelyFromAnOutage(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			provider, _ := newTestProvider(t, func(w http.ResponseWriter, r *http.Request) {
-				fmt.Fprint(w, test.reply)
+				_, _ = fmt.Fprint(w, test.reply)
 			})
 			if _, err := provider.Extract(context.Background(), image()); !apperror.Is(err, test.want) {
 				t.Fatalf("error = %v, want %s", err, test.want)
@@ -156,9 +156,9 @@ func TestTheAPIKeyNeverAppearsInAnError(t *testing.T) {
 		{name: "rejected request", handler: func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusForbidden)
 			// A provider that echoes the key back must not make it into our error either.
-			fmt.Fprintf(w, `{"error":{"message":"API key %s is invalid"}}`, secretKey)
+			_, _ = fmt.Fprintf(w, `{"error":{"message":"API key %s is invalid"}}`, secretKey)
 		}},
-		{name: "garbage response", handler: func(w http.ResponseWriter, r *http.Request) { fmt.Fprint(w, "not json") }},
+		{name: "garbage response", handler: func(w http.ResponseWriter, r *http.Request) { _, _ = fmt.Fprint(w, "not json") }},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			provider, _ := newTestProvider(t, test.handler)
@@ -181,7 +181,7 @@ func TestTheAPIKeyIsNotPutInTheURL(t *testing.T) {
 	var gotQuery string
 	provider, _ := newTestProvider(t, func(w http.ResponseWriter, r *http.Request) {
 		gotQuery = r.URL.RawQuery
-		fmt.Fprint(w, geminiReply(`{"merchant":"X","currency":"USD","lineItems":[{"name":"T","quantity":"1","unitPrice":"1","totalPrice":"1"}],"total":"1"}`))
+		_, _ = fmt.Fprint(w, geminiReply(`{"merchant":"X","currency":"USD","lineItems":[{"name":"T","quantity":"1","unitPrice":"1","totalPrice":"1"}],"total":"1"}`))
 	})
 	if _, err := provider.Extract(context.Background(), image()); err != nil {
 		t.Fatal(err)
@@ -204,7 +204,7 @@ func TestProviderIdentifiesItself(t *testing.T) {
 
 func TestExtractHonoursAContextThatIsAlreadyDone(t *testing.T) {
 	provider, _ := newTestProvider(t, func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprint(w, geminiReply(`{}`))
+		_, _ = fmt.Fprint(w, geminiReply(`{}`))
 	})
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
