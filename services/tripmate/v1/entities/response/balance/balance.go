@@ -86,12 +86,12 @@ func FinalPlanFromDomain(entity domainbalance.FinalPlan) FinalPlan {
 }
 
 type LedgerEntry struct {
-	Kind               string     `json:"kind"`
-	Date               string     `json:"date"`
-	ExpenseID          *uuid.UUID `json:"expense_id,omitempty"`
-	SettlementID       *uuid.UUID `json:"settlement_id,omitempty"`
-	Description        string     `json:"description"`
-	CategoryID         *uuid.UUID `json:"category_id,omitempty"`
+	Kind         string     `json:"kind"`
+	Date         string     `json:"date"`
+	ExpenseID    *uuid.UUID `json:"expense_id,omitempty"`
+	SettlementID *uuid.UUID `json:"settlement_id,omitempty"`
+	Description  string     `json:"description"`
+	CategoryID   *uuid.UUID `json:"category_id,omitempty"`
 	// Paid/Share are only present for expense rows in the unfiltered ("against everyone") view.
 	Paid               *string    `json:"paid,omitempty"`
 	Share              *string    `json:"share,omitempty"`
