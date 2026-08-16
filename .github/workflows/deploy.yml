@@ -22,7 +22,7 @@ jobs:
             set -e
             cd ${{ secrets.APP_PATH }}
 
-            git stash || true
+            git stash -u || true
             git checkout main
             git pull origin main
             git stash drop 2>/dev/null || true
