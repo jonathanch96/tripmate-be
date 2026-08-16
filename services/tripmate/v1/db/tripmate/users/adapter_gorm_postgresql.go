@@ -3,6 +3,7 @@ package users
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -90,6 +91,19 @@ func (a *adapterGormPostgresql) SetGoogleID(ctx context.Context, id uuid.UUID, g
 // password without touching its other fields.
 func (a *adapterGormPostgresql) SetPasswordHash(ctx context.Context, id uuid.UUID, hash string) error {
 	result := a.db.WithContext(ctx).Model(&User{}).Where("id = ?", id).Update("password_hash", hash)
+	if result.Error != nil {
+		return translate(result.Error)
+	}
+	if result.RowsAffected == 0 {
+		return apperror.New("USER_NOT_FOUND")
+	}
+	return nil
+}
+
+// TouchLastLogin records that a user has actually signed in - called after a successful
+// Authenticate/AuthenticateGoogle, never on token refresh.
+func (a *adapterGormPostgresql) TouchLastLogin(ctx context.Context, id uuid.UUID, at time.Time) error {
+	result := a.db.WithContext(ctx).Model(&User{}).Where("id = ?", id).Update("last_login_at", at)
 	if result.Error != nil {
 		return translate(result.Error)
 	}

@@ -26,7 +26,7 @@ func NewService(deps Dependencies) Service {
 
 func (s *service) Register(ctx context.Context, input RegisterInput) (*Session, error) {
 	email := normalizeEmail(input.Email)
-	if fields := validatePassword(input.Password); len(fields) > 0 {
+	if fields := ValidatePassword(input.Password); len(fields) > 0 {
 		return nil, apperror.WithFields("VALIDATION_FAILED", fields)
 	}
 	passwordHash, err := s.deps.Hasher.Hash(input.Password)
@@ -93,6 +93,7 @@ func (s *service) Authenticate(ctx context.Context, email, password string) (*Se
 	if missing || found == nil || noPassword || !verified {
 		return nil, apperror.New("INVALID_CREDENTIALS")
 	}
+	s.touchLastLogin(ctx, found.ID)
 	return s.issueSession(ctx, *found)
 }
 
@@ -112,6 +113,7 @@ func (s *service) AuthenticateGoogle(ctx context.Context, idToken string) (*Sess
 	email := normalizeEmail(claims.Email)
 	found, err := s.deps.Repo.GetByGoogleID(ctx, claims.Subject)
 	if err == nil {
+		s.touchLastLogin(ctx, found.ID)
 		return s.issueSession(ctx, *found)
 	}
 	if !apperror.Is(err, "USER_NOT_FOUND") {
@@ -122,6 +124,7 @@ func (s *service) AuthenticateGoogle(ctx context.Context, idToken string) (*Sess
 		if setErr := s.deps.Repo.SetGoogleID(ctx, found.ID, claims.Subject); setErr != nil {
 			return nil, setErr
 		}
+		s.touchLastLogin(ctx, found.ID)
 		return s.issueSession(ctx, *found)
 	}
 	if !apperror.Is(err, "USER_NOT_FOUND") {
@@ -136,7 +139,16 @@ func (s *service) AuthenticateGoogle(ctx context.Context, idToken string) (*Sess
 	if err != nil {
 		return nil, err
 	}
+	s.touchLastLogin(ctx, created.ID)
 	return s.issueSession(ctx, *created)
+}
+
+// touchLastLogin records a real sign-in. Failure here shouldn't fail the sign-in itself - it's a
+// secondary signal (used to show "not logged in yet" in trip member lists), not a security check.
+func (s *service) touchLastLogin(ctx context.Context, id uuid.UUID) {
+	if err := s.deps.Repo.TouchLastLogin(ctx, id, s.deps.Clock().UTC()); err != nil {
+		slog.WarnContext(ctx, "could not record last login", "user_id", id, "error", err)
+	}
 }
 
 func (s *service) Refresh(ctx context.Context, raw string) (*Session, error) {
@@ -204,13 +216,20 @@ func (s *service) FindByEmail(ctx context.Context, email string) (*domainuser.Us
 	return s.deps.Repo.GetByEmail(ctx, normalizeEmail(email))
 }
 
-func (s *service) CreatePlaceholder(ctx context.Context, email, name string) (*domainuser.User, error) {
+// CreateInvited creates a real account - with the password the inviter chose for them - for an
+// email invited to a trip that had no account yet. Unlike a password-less placeholder, this
+// account can sign in immediately with the credentials shared alongside the invite link; whether
+// they've actually done so is tracked separately via LastLoginAt/HasLoggedIn.
+func (s *service) CreateInvited(ctx context.Context, email, password string) (*domainuser.User, error) {
 	email = normalizeEmail(email)
-	name = strings.TrimSpace(name)
-	if name == "" {
-		name = email
+	if fields := ValidatePassword(password); len(fields) > 0 {
+		return nil, apperror.WithFields("VALIDATION_FAILED", fields)
 	}
-	created, err := s.deps.Repo.Create(ctx, &domainuser.User{ID: uuid.New(), Email: email, Name: name})
+	passwordHash, err := s.deps.Hasher.Hash(password)
+	if err != nil {
+		return nil, apperror.Wrap(err, "INTERNAL_ERROR")
+	}
+	created, err := s.deps.Repo.Create(ctx, &domainuser.User{ID: uuid.New(), Email: email, Name: email, PasswordHash: passwordHash})
 	if err != nil {
 		if apperror.Is(err, "EMAIL_ALREADY_REGISTERED") {
 			// Lost a race with someone else claiming or creating this email - use their row.
@@ -247,18 +266,29 @@ func tokenHash(value string) string {
 	return hex.EncodeToString(digest[:])
 }
 
-func validatePassword(value string) []apperror.FieldError {
-	var letter, digit bool
+// ValidatePassword enforces the app-wide password policy: at least 8 characters, with at least
+// one uppercase letter, one lowercase letter, one digit, and one symbol. Shared by Register,
+// CreateInvited, and ChangePassword so every path that sets a password agrees on the same rule.
+func ValidatePassword(value string) []apperror.FieldError {
+	var upper, lower, digit, symbol bool
 	for _, character := range value {
-		letter = letter || unicode.IsLetter(character)
-		digit = digit || unicode.IsDigit(character)
+		switch {
+		case unicode.IsUpper(character):
+			upper = true
+		case unicode.IsLower(character):
+			lower = true
+		case unicode.IsDigit(character):
+			digit = true
+		case !unicode.IsSpace(character):
+			symbol = true
+		}
 	}
 	fields := make([]apperror.FieldError, 0, 2)
 	if len(value) < 8 {
 		fields = append(fields, apperror.FieldError{Field: "password", Rule: "min", Message: "password must be at least 8 characters"})
 	}
-	if !letter || !digit {
-		fields = append(fields, apperror.FieldError{Field: "password", Rule: "complexity", Message: "password must contain a letter and a digit"})
+	if !upper || !lower || !digit || !symbol {
+		fields = append(fields, apperror.FieldError{Field: "password", Rule: "complexity", Message: "password must contain an uppercase letter, a lowercase letter, a number, and a symbol"})
 	}
 	return fields
 }

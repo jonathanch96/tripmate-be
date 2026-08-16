@@ -83,9 +83,9 @@ func (s *invitationParticipantServiceStub) Add(_ context.Context, _ uuid.UUID, c
 }
 
 type invitationUserFinder struct {
-	user        *domainuser.User
-	err         error
-	placeholder *domainuser.User
+	user    *domainuser.User
+	err     error
+	invited *domainuser.User
 }
 
 type pendingInvitationRepo struct {
@@ -107,11 +107,11 @@ func (r *pendingInvitationRepo) GetPending(context.Context, uuid.UUID, string) (
 func (f invitationUserFinder) FindByEmail(context.Context, string) (*domainuser.User, error) {
 	return f.user, f.err
 }
-func (f invitationUserFinder) CreatePlaceholder(_ context.Context, email, name string) (*domainuser.User, error) {
-	if f.placeholder != nil {
-		return f.placeholder, nil
+func (f invitationUserFinder) CreateInvited(_ context.Context, email, _ string) (*domainuser.User, error) {
+	if f.invited != nil {
+		return f.invited, nil
 	}
-	return &domainuser.User{ID: uuid.New(), Email: email, Name: name}, nil
+	return &domainuser.User{ID: uuid.New(), Email: email, Name: email, PasswordHash: "hashed"}, nil
 }
 func (*invitationParticipantServiceStub) List(context.Context, uuid.UUID, string) ([]domainparticipant.Participant, error) {
 	panic("unexpected List")
@@ -183,7 +183,7 @@ func TestInviteExistingUserAddsParticipantImmediately(t *testing.T) {
 	)
 	ctx := tripctx.WithContext(context.Background(), tripctx.TripContext{Trip: trip, Participant: planner})
 
-	result, err := service.Invite(ctx, actor, trip.Code, " Member@Example.com ")
+	result, err := service.Invite(ctx, actor, trip.Code, " Member@Example.com ", "Password1!")
 	if err != nil {
 		t.Fatalf("Invite() error = %v", err)
 	}
@@ -210,7 +210,7 @@ func TestReinviteExtendsPendingInvitationWithoutChangingToken(t *testing.T) {
 	service.clock = func() time.Time { return now }
 	ctx := tripctx.WithContext(context.Background(), tripctx.TripContext{Trip: trip, Participant: planner})
 
-	result, err := service.Invite(ctx, actor, trip.Code, "FRIEND@example.com")
+	result, err := service.Invite(ctx, actor, trip.Code, "FRIEND@example.com", "Password1!")
 	if err != nil {
 		t.Fatalf("Invite() error = %v", err)
 	}
@@ -224,7 +224,7 @@ func TestInviteRequiresPlanner(t *testing.T) {
 	trip := domaintrip.Trip{ID: uuid.New(), Code: "ABC123"}
 	member := domainparticipant.Participant{TripID: trip.ID, UserID: actor, Role: domainparticipant.RoleParticipant}
 	ctx := tripctx.WithContext(context.Background(), tripctx.TripContext{Trip: trip, Participant: member})
-	_, err := NewService(&invitationRepoStub{}, invitationTripRepoStub{trip: trip}, invitationUserFinder{}, &invitationParticipantServiceStub{}).Invite(ctx, actor, trip.Code, "friend@example.com")
+	_, err := NewService(&invitationRepoStub{}, invitationTripRepoStub{trip: trip}, invitationUserFinder{}, &invitationParticipantServiceStub{}).Invite(ctx, actor, trip.Code, "friend@example.com", "Password1!")
 	if !apperror.Is(err, "PLANNER_ONLY") {
 		t.Fatalf("Invite(participant) error = %v", err)
 	}
@@ -239,7 +239,7 @@ func TestInviteCreatesFreshPendingInvitation(t *testing.T) {
 	service := NewService(repo, invitationTripRepoStub{trip: trip}, invitationUserFinder{err: apperror.New("USER_NOT_FOUND")}, &invitationParticipantServiceStub{}).(*service)
 	service.clock = func() time.Time { return now }
 	ctx := tripctx.WithContext(context.Background(), tripctx.TripContext{Trip: trip, Participant: planner})
-	result, err := service.Invite(ctx, actor, trip.Code, " FRIEND@example.com ")
+	result, err := service.Invite(ctx, actor, trip.Code, " FRIEND@example.com ", "Password1!")
 	if err != nil {
 		t.Fatalf("Invite() error = %v", err)
 	}
@@ -248,33 +248,33 @@ func TestInviteCreatesFreshPendingInvitation(t *testing.T) {
 	}
 }
 
-// Inviting an email with no account yet must not leave them un-assignable until they sign up -
-// they should become a real participant immediately, via a placeholder account claimed later by
-// Register/AuthenticateGoogle.
-func TestInviteWithNoExistingAccountCreatesPlaceholderAndAddsParticipantImmediately(t *testing.T) {
+// Inviting an email with no account yet must not leave them un-assignable until they sign in -
+// they should become a real participant immediately, via an account created with the password
+// the inviter chose for them.
+func TestInviteWithNoExistingAccountCreatesAccountAndAddsParticipantImmediately(t *testing.T) {
 	now := time.Date(2026, 8, 6, 12, 0, 0, 0, time.UTC)
 	actor := uuid.New()
 	trip := domaintrip.Trip{ID: uuid.New(), Code: "ABC123"}
 	planner := domainparticipant.Participant{TripID: trip.ID, UserID: actor, Role: domainparticipant.RolePlanner}
-	placeholder := &domainuser.User{ID: uuid.New(), Email: "friend@example.com"}
+	invited := &domainuser.User{ID: uuid.New(), Email: "friend@example.com", PasswordHash: "hashed"}
 	repo := &invitationRepoStub{}
 	participants := &invitationParticipantServiceStub{}
 	service := NewService(
 		repo, invitationTripRepoStub{trip: trip},
-		invitationUserFinder{err: apperror.New("USER_NOT_FOUND"), placeholder: placeholder},
+		invitationUserFinder{err: apperror.New("USER_NOT_FOUND"), invited: invited},
 		participants,
 	).(*service)
 	service.clock = func() time.Time { return now }
 	ctx := tripctx.WithContext(context.Background(), tripctx.TripContext{Trip: trip, Participant: planner})
 
-	result, err := service.Invite(ctx, actor, trip.Code, " Friend@Example.com ")
+	result, err := service.Invite(ctx, actor, trip.Code, " Friend@Example.com ", "Password1!")
 	if err != nil {
 		t.Fatalf("Invite() error = %v", err)
 	}
-	if participants.addCode != trip.Code || participants.addedUser != placeholder.ID {
-		t.Fatalf("participant was not added for the placeholder: add code = %q, user = %s", participants.addCode, participants.addedUser)
+	if participants.addCode != trip.Code || participants.addedUser != invited.ID {
+		t.Fatalf("participant was not added for the invited account: add code = %q, user = %s", participants.addCode, participants.addedUser)
 	}
-	if result.Participant == nil || result.Participant.UserID != placeholder.ID {
+	if result.Participant == nil || result.Participant.UserID != invited.ID {
 		t.Fatalf("Invite() result did not carry the new participant: %+v", result)
 	}
 	if result.Status != "invited" || repo.created == nil {

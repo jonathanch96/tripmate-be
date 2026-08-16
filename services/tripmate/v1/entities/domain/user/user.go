@@ -14,10 +14,14 @@ type User struct {
 	PasswordHash string
 	// GoogleID is the Google account's stable subject ("sub") claim, set once a user signs in
 	// with Google (either at account creation or by linking an existing password account).
-	GoogleID  *string
-	AvatarURL *string
-	CreatedAt time.Time
-	UpdatedAt time.Time
+	GoogleID *string
+	// LastLoginAt is set the first time this user actually signs in (password or Google) - unlike
+	// PasswordHash/GoogleID, which can be set on their behalf (e.g. an invite creating an account
+	// with a chosen password), this only ever changes when they use it themselves.
+	LastLoginAt *time.Time
+	AvatarURL   *string
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
 }
 
 type PublicUser struct {
@@ -25,19 +29,25 @@ type PublicUser struct {
 	Email     string
 	Name      string
 	AvatarURL *string
-	// HasAccount is false for a placeholder created by inviting an email that had no account yet
-	// - they're a real trip participant (can be assigned expenses, etc.) but haven't registered
-	// or signed in with Google, so they can't sign in themselves until they do.
+	// HasAccount is true once a user has credentials of any kind (password or Google). Invited
+	// accounts get a password immediately (CreateInvited), so this is nearly always true - use
+	// HasLoggedIn to tell whether they've actually signed in.
 	HasAccount bool
-	CreatedAt  time.Time
-	UpdatedAt  time.Time
+	// HasLoggedIn is true once this user has signed in at least once (password or Google). An
+	// invited account has credentials (HasAccount) from the moment it's created, but stays
+	// HasLoggedIn=false until the invitee actually uses them - that's the signal trip member lists
+	// use to show "not logged in yet".
+	HasLoggedIn bool
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
 }
 
 func (u User) Public() PublicUser {
 	return PublicUser{
 		ID: u.ID, Email: u.Email, Name: u.Name, AvatarURL: u.AvatarURL,
-		HasAccount: u.PasswordHash != "" || u.GoogleID != nil,
-		CreatedAt:  u.CreatedAt, UpdatedAt: u.UpdatedAt,
+		HasAccount:  u.PasswordHash != "" || u.GoogleID != nil,
+		HasLoggedIn: u.LastLoginAt != nil,
+		CreatedAt:   u.CreatedAt, UpdatedAt: u.UpdatedAt,
 	}
 }
 

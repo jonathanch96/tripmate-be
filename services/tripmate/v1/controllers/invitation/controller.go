@@ -53,7 +53,7 @@ func (c *controller) create(ctx *gin.Context) {
 	if !bind(ctx, &request) {
 		return
 	}
-	result, err := c.invitations.Invite(ctx, actor(ctx).UserID, ctx.Param("code"), request.Email)
+	result, err := c.invitations.Invite(ctx, actor(ctx).UserID, ctx.Param("code"), request.Email, request.Password)
 	if err != nil {
 		response.Error(ctx, err)
 		return

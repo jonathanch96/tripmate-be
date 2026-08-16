@@ -33,7 +33,7 @@ type TripRepository interface {
 }
 type UserFinder interface {
 	FindByEmail(context.Context, string) (*domainuser.User, error)
-	CreatePlaceholder(ctx context.Context, email, name string) (*domainuser.User, error)
+	CreateInvited(ctx context.Context, email, password string) (*domainuser.User, error)
 }
 type Result struct {
 	Status      string
@@ -41,7 +41,7 @@ type Result struct {
 	Participant *domainparticipant.Participant
 }
 type Service interface {
-	Invite(context.Context, uuid.UUID, string, string) (*Result, error)
+	Invite(context.Context, uuid.UUID, string, string, string) (*Result, error)
 	Accept(context.Context, uuid.UUID, string, string) (*domainparticipant.Participant, error)
 	ListForMe(context.Context, string) ([]domaininv.Invitation, error)
 	ListTrip(context.Context, uuid.UUID, string) ([]domaininv.Invitation, error)
@@ -58,7 +58,7 @@ type service struct {
 func NewService(repo Repository, trips TripRepository, users UserFinder, parts participantdomain.Service) Service {
 	return &service{repo: repo, trips: trips, users: users, parts: parts, clock: time.Now}
 }
-func (s *service) Invite(ctx context.Context, actor uuid.UUID, code, email string) (*Result, error) {
+func (s *service) Invite(ctx context.Context, actor uuid.UUID, code, email, password string) (*Result, error) {
 	email = strings.ToLower(strings.TrimSpace(email))
 	t, err := s.plannerTrip(ctx, actor, code)
 	if err != nil {
@@ -70,16 +70,16 @@ func (s *service) Invite(ctx context.Context, actor uuid.UUID, code, email strin
 	} else if !apperror.Is(e, "USER_NOT_FOUND") {
 		return nil, e
 	}
-	// No account exists for this email yet - create a placeholder one now instead of waiting for
-	// them to sign up, so the planner can assign them as an expense payer/split participant right
-	// away. Register or AuthenticateGoogle claims the same row later. They're still tracked with
-	// a pending invitation/token so they can be sent a link and Accept() can mark it accepted once
-	// they do sign in.
-	placeholder, err := s.users.CreatePlaceholder(ctx, email, "")
+	// No account exists for this email yet - create one now, with the password the inviter chose,
+	// instead of waiting for them to sign up. This lets the planner assign them as an expense
+	// payer/split participant right away, and lets the invitee sign in immediately using the
+	// credentials shared alongside the invite link. They're still tracked with a pending
+	// invitation/token so Accept() can mark it accepted once they do sign in.
+	invited, err := s.users.CreateInvited(ctx, email, password)
 	if err != nil {
 		return nil, err
 	}
-	participant, err := s.parts.Add(ctx, actor, code, placeholder.ID)
+	participant, err := s.parts.Add(ctx, actor, code, invited.ID)
 	if err != nil {
 		return nil, err
 	}
