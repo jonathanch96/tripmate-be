@@ -85,6 +85,49 @@ func FinalPlanFromDomain(entity domainbalance.FinalPlan) FinalPlan {
 	return FinalPlan{BaseCurrency: entity.BaseCurrency, Transfers: TransfersFromDomain(entity.Transfers)}
 }
 
+type LedgerEntry struct {
+	Kind               string     `json:"kind"`
+	Date               string     `json:"date"`
+	ExpenseID          *uuid.UUID `json:"expense_id,omitempty"`
+	SettlementID       *uuid.UUID `json:"settlement_id,omitempty"`
+	Description        string     `json:"description"`
+	CategoryID         *uuid.UUID `json:"category_id,omitempty"`
+	// Paid/Share are only present for expense rows in the unfiltered ("against everyone") view.
+	Paid               *string    `json:"paid,omitempty"`
+	Share              *string    `json:"share,omitempty"`
+	CounterpartyUserID *uuid.UUID `json:"counterparty_user_id,omitempty"`
+	Delta              string     `json:"delta"`
+	RunningBalance     string     `json:"running_balance"`
+}
+
+type Ledger struct {
+	BaseCurrency  string        `json:"base_currency"`
+	MemberUserID  uuid.UUID     `json:"member_user_id"`
+	AgainstUserID *uuid.UUID    `json:"against_user_id,omitempty"`
+	Entries       []LedgerEntry `json:"entries"`
+	NetBalance    string        `json:"net_balance"`
+}
+
+func LedgerFromDomain(entity domainbalance.Ledger) Ledger {
+	scale := money.DisplayScale(entity.BaseCurrency)
+	entries := make([]LedgerEntry, len(entity.Entries))
+	for i, row := range entity.Entries {
+		entries[i] = LedgerEntry{Kind: string(row.Kind), Date: row.Date.Format("2006-01-02"), ExpenseID: row.ExpenseID,
+			SettlementID: row.SettlementID, Description: row.Description, CategoryID: row.CategoryID,
+			CounterpartyUserID: row.CounterpartyUserID, Delta: row.Delta.StringFixedBank(scale), RunningBalance: row.RunningBalance.StringFixedBank(scale)}
+		if row.Paid != nil {
+			paid := row.Paid.StringFixedBank(scale)
+			entries[i].Paid = &paid
+		}
+		if row.Share != nil {
+			share := row.Share.StringFixedBank(scale)
+			entries[i].Share = &share
+		}
+	}
+	return Ledger{BaseCurrency: entity.BaseCurrency, MemberUserID: entity.MemberUserID, AgainstUserID: entity.AgainstUserID,
+		Entries: entries, NetBalance: entity.NetBalance.StringFixedBank(scale)}
+}
+
 func TransfersFromDomain(entities []domainbalance.Transfer) []Transfer {
 	rows := make([]Transfer, len(entities))
 	for i, row := range entities {

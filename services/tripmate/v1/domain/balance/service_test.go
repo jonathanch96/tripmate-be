@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jblabs/tripmate-be/pkg/apperror"
@@ -304,5 +305,122 @@ func TestFinalSettlementExposesFullBankDetailsOnlyToPayerOrPlanner(t *testing.T)
 	plannerPlan, err := service.FinalSettlement(context.Background(), tripctx.TripContext{Trip: trip, Participant: domainparticipant.Participant{UserID: c, Role: domainparticipant.RolePlanner}})
 	if err != nil || plannerPlan.Transfers[0].BankAccountNumber == nil {
 		t.Fatalf("planner plan=%+v err=%v", plannerPlan, err)
+	}
+}
+
+func TestLedgerUnfilteredExcludesSelfTransactionsAndTracksRunningBalance(t *testing.T) {
+	a, b, c := uuid.UUID{15: 1}, uuid.UUID{15: 2}, uuid.UUID{15: 3}
+	participants := participantRows{participant(a, "Ana"), participant(b, "Ben"), participant(c, "Cara")}
+	day1, day2 := time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC), time.Date(2026, 8, 2, 0, 0, 0, 0, time.UTC)
+	// A pays for something entirely for themselves - paid equals share, nets to zero, must not appear.
+	selfOnly := domainexpense.Expense{ID: uuid.New(), ExpenseDate: day1, Description: "Personal snack", Currency: "PHP", Status: domainexpense.StatusApproved,
+		Payers: []domainexpense.Payer{{UserID: a, Amount: decimal.NewFromInt(20)}}, Splits: []domainexpense.Split{{UserID: a, Amount: decimal.NewFromInt(20)}}}
+	// A pays 120 split equally three ways (40 each) - A is owed 80 overall.
+	shared := domainexpense.Expense{ID: uuid.New(), ExpenseDate: day1, Description: "Group dinner", Currency: "PHP", Status: domainexpense.StatusApproved,
+		Payers: []domainexpense.Payer{{UserID: a, Amount: decimal.NewFromInt(120)}},
+		Splits: []domainexpense.Split{{UserID: a, Amount: decimal.NewFromInt(40)}, {UserID: b, Amount: decimal.NewFromInt(40)}, {UserID: c, Amount: decimal.NewFromInt(40)}}}
+	settlement := domainsettlement.Settlement{ID: uuid.New(), FromUserID: c, ToUserID: a, Amount: decimal.NewFromInt(10), Currency: "PHP", Status: domainsettlement.StatusApproved, CreatedAt: day2}
+	service := balancedomain.NewService(balancedomain.Dependencies{Expenses: expenseRows{selfOnly, shared}, Settlements: settlementRows{settlement}, Participants: participants, FX: tableProvider{table: fxdomain.NewRateTable(nil)}})
+
+	result, err := service.Ledger(context.Background(), tripctx.TripContext{Trip: domaintrip.Trip{ID: uuid.New(), BaseCurrency: "PHP"}}, balancedomain.LedgerFilter{MemberUserID: a})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Entries) != 2 {
+		t.Fatalf("entries = %+v, want 2 (self-only expense excluded)", result.Entries)
+	}
+	if !result.Entries[0].Delta.Equal(decimal.NewFromInt(80)) || !result.Entries[0].RunningBalance.Equal(decimal.NewFromInt(80)) {
+		t.Fatalf("entry[0] = %+v, want delta=80 running=80", result.Entries[0])
+	}
+	if result.Entries[0].Paid == nil || !result.Entries[0].Paid.Equal(decimal.NewFromInt(120)) || result.Entries[0].Share == nil || !result.Entries[0].Share.Equal(decimal.NewFromInt(40)) {
+		t.Fatalf("entry[0] paid/share = %+v/%+v, want 120/40", result.Entries[0].Paid, result.Entries[0].Share)
+	}
+	if !result.Entries[1].Delta.Equal(decimal.NewFromInt(-10)) || !result.Entries[1].RunningBalance.Equal(decimal.NewFromInt(70)) {
+		t.Fatalf("entry[1] (settlement received) = %+v, want delta=-10 running=70", result.Entries[1])
+	}
+	if !result.NetBalance.Equal(decimal.NewFromInt(70)) {
+		t.Fatalf("NetBalance = %s, want 70", result.NetBalance)
+	}
+}
+
+func TestLedgerPairwiseSkipsSelfSharesAndComputesNetBetweenTwoMembers(t *testing.T) {
+	a, b, c := uuid.UUID{15: 1}, uuid.UUID{15: 2}, uuid.UUID{15: 3}
+	participants := participantRows{participant(a, "Ana"), participant(b, "Ben"), participant(c, "Cara")}
+	expense := domainexpense.Expense{ID: uuid.New(), ExpenseDate: time.Now(), Description: "Group dinner", Currency: "PHP", Status: domainexpense.StatusApproved,
+		Payers: []domainexpense.Payer{{UserID: a, Amount: decimal.NewFromInt(120)}},
+		Splits: []domainexpense.Split{{UserID: a, Amount: decimal.NewFromInt(40)}, {UserID: b, Amount: decimal.NewFromInt(40)}, {UserID: c, Amount: decimal.NewFromInt(40)}}}
+	service := balancedomain.NewService(balancedomain.Dependencies{Expenses: expenseRows{expense}, Settlements: settlementRows{}, Participants: participants, FX: tableProvider{table: fxdomain.NewRateTable(nil)}})
+	trip := tripctx.TripContext{Trip: domaintrip.Trip{ID: uuid.New(), BaseCurrency: "PHP"}}
+
+	// B owes A for the portion of B's share that A paid for.
+	bAgainstA, err := service.Ledger(context.Background(), trip, balancedomain.LedgerFilter{MemberUserID: b, AgainstUserID: &a})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(bAgainstA.Entries) != 1 || !bAgainstA.Entries[0].Delta.Equal(decimal.NewFromInt(-40)) {
+		t.Fatalf("B against A = %+v, want a single -40 entry", bAgainstA.Entries)
+	}
+	if bAgainstA.Entries[0].CounterpartyUserID == nil || *bAgainstA.Entries[0].CounterpartyUserID != a {
+		t.Fatalf("B against A counterparty = %+v, want A", bAgainstA.Entries[0].CounterpartyUserID)
+	}
+
+	// Symmetric from A's side.
+	aAgainstB, err := service.Ledger(context.Background(), trip, balancedomain.LedgerFilter{MemberUserID: a, AgainstUserID: &b})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(aAgainstB.Entries) != 1 || !aAgainstB.Entries[0].Delta.Equal(decimal.NewFromInt(40)) {
+		t.Fatalf("A against B = %+v, want a single +40 entry", aAgainstB.Entries)
+	}
+
+	// B and C never transacted directly on this expense (neither paid the other's share).
+	bAgainstC, err := service.Ledger(context.Background(), trip, balancedomain.LedgerFilter{MemberUserID: b, AgainstUserID: &c})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(bAgainstC.Entries) != 0 {
+		t.Fatalf("B against C = %+v, want no entries", bAgainstC.Entries)
+	}
+}
+
+func TestLedgerSettlementDirectionsAndFiltering(t *testing.T) {
+	a, b, c := uuid.UUID{15: 1}, uuid.UUID{15: 2}, uuid.UUID{15: 3}
+	participants := participantRows{participant(a, "Ana"), participant(b, "Ben"), participant(c, "Cara")}
+	settlement := domainsettlement.Settlement{ID: uuid.New(), FromUserID: a, ToUserID: b, Amount: decimal.NewFromInt(50), Currency: "PHP", Status: domainsettlement.StatusApproved, CreatedAt: time.Now()}
+	service := balancedomain.NewService(balancedomain.Dependencies{Expenses: expenseRows{}, Settlements: settlementRows{settlement}, Participants: participants, FX: tableProvider{table: fxdomain.NewRateTable(nil)}})
+	trip := tripctx.TripContext{Trip: domaintrip.Trip{ID: uuid.New(), BaseCurrency: "PHP"}}
+
+	sender, err := service.Ledger(context.Background(), trip, balancedomain.LedgerFilter{MemberUserID: a})
+	if err != nil || len(sender.Entries) != 1 || !sender.Entries[0].Delta.Equal(decimal.NewFromInt(50)) {
+		t.Fatalf("sender ledger = %+v, err=%v, want a single +50 entry", sender.Entries, err)
+	}
+	receiver, err := service.Ledger(context.Background(), trip, balancedomain.LedgerFilter{MemberUserID: b})
+	if err != nil || len(receiver.Entries) != 1 || !receiver.Entries[0].Delta.Equal(decimal.NewFromInt(-50)) {
+		t.Fatalf("receiver ledger = %+v, err=%v, want a single -50 entry", receiver.Entries, err)
+	}
+	filtered, err := service.Ledger(context.Background(), trip, balancedomain.LedgerFilter{MemberUserID: a, AgainstUserID: &b})
+	if err != nil || len(filtered.Entries) != 1 {
+		t.Fatalf("A against B = %+v, err=%v, want the settlement included", filtered.Entries, err)
+	}
+	unrelated, err := service.Ledger(context.Background(), trip, balancedomain.LedgerFilter{MemberUserID: a, AgainstUserID: &c})
+	if err != nil || len(unrelated.Entries) != 0 {
+		t.Fatalf("A against C = %+v, err=%v, want no entries (settlement was with B)", unrelated.Entries, err)
+	}
+}
+
+func TestLedgerHonorsChargedAmountOverride(t *testing.T) {
+	a, b := uuid.UUID{15: 1}, uuid.UUID{15: 2}
+	participants := participantRows{participant(a, "Ana"), participant(b, "Ben")}
+	// 1500 THB paid by A, actually charged 840000 IDR - the per-expense override rate, not any
+	// trip-configured rate (there is none here).
+	expense := chargedExpense("THB", 1500, a, 840000, "IDR", []domainexpense.Split{{UserID: a, Amount: decimal.NewFromInt(750)}, {UserID: b, Amount: decimal.NewFromInt(750)}})
+	service := balancedomain.NewService(balancedomain.Dependencies{Expenses: expenseRows{expense}, Settlements: settlementRows{}, Participants: participants, FX: tableProvider{table: fxdomain.NewRateTable(nil)}})
+
+	result, err := service.Ledger(context.Background(), tripctx.TripContext{Trip: domaintrip.Trip{ID: uuid.New(), BaseCurrency: "IDR"}}, balancedomain.LedgerFilter{MemberUserID: a})
+	if err != nil {
+		t.Fatalf("Ledger() error = %v, want no error even without a configured THB→IDR rate", err)
+	}
+	if len(result.Entries) != 1 || !result.Entries[0].Delta.Equal(decimal.NewFromInt(420000)) {
+		t.Fatalf("entries = %+v, want a single +420000 entry (840000 charged - 420000 own share)", result.Entries)
 	}
 }

@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jblabs/tripmate-be/pkg/apperror"
@@ -19,6 +20,10 @@ import (
 	domainuser "github.com/jblabs/tripmate-be/services/tripmate/v1/entities/domain/user"
 	"github.com/shopspring/decimal"
 )
+
+// ledgerEpsilon mirrors the money package's rounding tolerance: a delta this small is rounding
+// noise, not a real transaction, and is left out of a member's statement entirely.
+var ledgerEpsilon = decimal.NewFromFloat(0.005)
 
 type service struct{ deps Dependencies }
 
@@ -68,16 +73,7 @@ func (s *service) Calculate(ctx context.Context, tc tripctx.TripContext) (*domai
 			continue
 		}
 		summary.ExpenseCount++
-		// A base-currency charged amount (e.g. what a card statement actually showed) is the
-		// authoritative conversion for this one expense - it overrides the trip's saved rate rather
-		// than requiring one, and never touches any other expense.
-		overrideRate, hasOverride := chargedOverrideRate(expense, tc.Trip.BaseCurrency)
-		convert := func(amount decimal.Decimal) (decimal.Decimal, error) {
-			if hasOverride {
-				return amount.Mul(overrideRate), nil
-			}
-			return table.Convert(amount, expense.Currency, tc.Trip.BaseCurrency)
-		}
+		convert, hasOverride := expenseConverter(expense, table, tc.Trip.BaseCurrency)
 		converted, convertErr := convert(expense.Amount)
 		if convertErr != nil {
 			return nil, convertErr
@@ -202,6 +198,168 @@ func (s *service) OutstandingDebt(ctx context.Context, tripID, fromID, toID uuid
 	return decimal.Min(owedByFrom, owedToTo), nil
 }
 
+// Ledger builds one member's statement: every expense/settlement that actually moved their
+// balance, oldest first, with a running total - like a bank statement. An expense where the
+// member paid exactly their own share (or wasn't involved at all) nets to zero and is left out
+// entirely, same as a bank statement only lists real transactions.
+//
+// When filter.AgainstUserID is set, every entry collapses to the net effect between just those two
+// members: for an expense, each split-member's share is distributed across payers in proportion to
+// what they paid, a payer's own share of what they themselves paid is skipped (not a transaction
+// between two people), and only the portions that cross between the member and the counterparty are
+// kept.
+func (s *service) Ledger(ctx context.Context, tc tripctx.TripContext, filter LedgerFilter) (*domainbalance.Ledger, error) {
+	expenses, err := s.deps.Expenses.ListForBalance(ctx, tc.Trip.ID)
+	if err != nil {
+		return nil, err
+	}
+	settlements, err := s.deps.Settlements.ListForBalance(ctx, tc.Trip.ID)
+	if err != nil {
+		return nil, err
+	}
+	table, err := s.deps.FX.EffectiveTable(ctx, tc.Trip.ID)
+	if err != nil {
+		return nil, err
+	}
+	if err = validateRates(table, tc.Trip, expenses, settlements); err != nil {
+		return nil, err
+	}
+
+	member := filter.MemberUserID
+	filtering := filter.AgainstUserID != nil && *filter.AgainstUserID != member
+	var against uuid.UUID
+	if filtering {
+		against = *filter.AgainstUserID
+	}
+
+	type draft struct {
+		kind               domainbalance.LedgerEntryKind
+		date               time.Time
+		expenseID          *uuid.UUID
+		settlementID       *uuid.UUID
+		description        string
+		categoryID         *uuid.UUID
+		paid, share        *decimal.Decimal
+		counterpartyUserID *uuid.UUID
+		delta              decimal.Decimal
+	}
+	var drafts []draft
+
+	for _, expense := range expenses {
+		if expense.Status != domainexpense.StatusApproved {
+			continue
+		}
+		convert, _ := expenseConverter(expense, table, tc.Trip.BaseCurrency)
+		id := expense.ID
+		if !filtering {
+			paid := decimal.Zero
+			for _, payer := range expense.Payers {
+				if payer.UserID != member {
+					continue
+				}
+				amount, convertErr := convert(payer.Amount)
+				if convertErr != nil {
+					return nil, convertErr
+				}
+				paid = paid.Add(amount)
+			}
+			share := decimal.Zero
+			for _, split := range expense.Splits {
+				if split.UserID != member {
+					continue
+				}
+				amount, convertErr := convert(split.Amount)
+				if convertErr != nil {
+					return nil, convertErr
+				}
+				share = share.Add(amount)
+			}
+			if delta := paid.Sub(share); delta.Abs().GreaterThan(ledgerEpsilon) {
+				drafts = append(drafts, draft{kind: domainbalance.LedgerEntryExpense, date: expense.ExpenseDate, expenseID: &id,
+					description: expense.Description, categoryID: expense.CategoryID, paid: &paid, share: &share, delta: delta})
+			}
+			continue
+		}
+		totalPaid := decimal.Zero
+		for _, payer := range expense.Payers {
+			amount, convertErr := convert(payer.Amount)
+			if convertErr != nil {
+				return nil, convertErr
+			}
+			totalPaid = totalPaid.Add(amount)
+		}
+		if !totalPaid.IsPositive() {
+			continue
+		}
+		delta := decimal.Zero
+		for _, payer := range expense.Payers {
+			paidByPayer, convertErr := convert(payer.Amount)
+			if convertErr != nil {
+				return nil, convertErr
+			}
+			for _, split := range expense.Splits {
+				if split.UserID == payer.UserID {
+					continue
+				}
+				splitAmount, convertErr := convert(split.Amount)
+				if convertErr != nil {
+					return nil, convertErr
+				}
+				debt := splitAmount.Mul(paidByPayer).Div(totalPaid)
+				switch {
+				case split.UserID == member && payer.UserID == against:
+					delta = delta.Sub(debt)
+				case split.UserID == against && payer.UserID == member:
+					delta = delta.Add(debt)
+				}
+			}
+		}
+		if delta.Abs().GreaterThan(ledgerEpsilon) {
+			counterparty := against
+			drafts = append(drafts, draft{kind: domainbalance.LedgerEntryExpense, date: expense.ExpenseDate, expenseID: &id,
+				description: expense.Description, categoryID: expense.CategoryID, counterpartyUserID: &counterparty, delta: delta})
+		}
+	}
+
+	for _, settlement := range settlements {
+		if settlement.Status != domainsettlement.StatusApproved {
+			continue
+		}
+		amount, convertErr := table.Convert(settlement.Amount, settlement.Currency, tc.Trip.BaseCurrency)
+		if convertErr != nil {
+			return nil, convertErr
+		}
+		id := settlement.ID
+		from, to := settlement.FromUserID, settlement.ToUserID
+		sent, received := from == member && (!filtering || to == against), to == member && (!filtering || from == against)
+		switch {
+		case sent:
+			counterparty := to
+			drafts = append(drafts, draft{kind: domainbalance.LedgerEntrySettlement, date: settlement.CreatedAt, settlementID: &id,
+				description: "Settlement", counterpartyUserID: &counterparty, delta: amount})
+		case received:
+			counterparty := from
+			drafts = append(drafts, draft{kind: domainbalance.LedgerEntrySettlement, date: settlement.CreatedAt, settlementID: &id,
+				description: "Settlement", counterpartyUserID: &counterparty, delta: amount.Neg()})
+		}
+	}
+
+	sort.SliceStable(drafts, func(i, j int) bool { return drafts[i].date.Before(drafts[j].date) })
+	entries := make([]domainbalance.LedgerEntry, len(drafts))
+	running := decimal.Zero
+	for i, d := range drafts {
+		running = running.Add(d.delta)
+		entries[i] = domainbalance.LedgerEntry{Kind: d.kind, Date: d.date, ExpenseID: d.expenseID, SettlementID: d.settlementID,
+			Description: d.description, CategoryID: d.categoryID, Paid: d.paid, Share: d.share,
+			CounterpartyUserID: d.counterpartyUserID, Delta: d.delta, RunningBalance: running}
+	}
+	result := &domainbalance.Ledger{BaseCurrency: strings.ToUpper(tc.Trip.BaseCurrency), MemberUserID: member, Entries: entries, NetBalance: running}
+	if filtering {
+		result.AgainstUserID = &against
+	}
+	return result, nil
+}
+
 func (s *service) FinalSettlement(ctx context.Context, tc tripctx.TripContext) (*domainbalance.FinalPlan, error) {
 	result, err := s.Calculate(ctx, tc)
 	if err != nil {
@@ -230,6 +388,19 @@ func (s *service) FinalSettlement(ctx context.Context, tc tripctx.TripContext) (
 		transfers[i].BankAccountHolder = &bank.AccountHolder
 	}
 	return &domainbalance.FinalPlan{BaseCurrency: result.BaseCurrency, Transfers: transfers}, nil
+}
+
+// expenseConverter returns a function that converts an amount in this expense's own currency into
+// the trip's base currency - using the expense's own charged-amount override when it has one,
+// falling back to the trip's saved rate table otherwise - plus whether an override was used.
+func expenseConverter(expense domainexpense.Expense, table *fxdomain.RateTable, tripBaseCurrency string) (func(decimal.Decimal) (decimal.Decimal, error), bool) {
+	overrideRate, hasOverride := chargedOverrideRate(expense, tripBaseCurrency)
+	return func(amount decimal.Decimal) (decimal.Decimal, error) {
+		if hasOverride {
+			return amount.Mul(overrideRate), nil
+		}
+		return table.Convert(amount, expense.Currency, tripBaseCurrency)
+	}, hasOverride
 }
 
 // chargedOverrideRate returns the per-transaction conversion rate for an expense carrying an

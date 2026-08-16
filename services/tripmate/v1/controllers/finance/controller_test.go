@@ -16,6 +16,7 @@ import (
 	"github.com/jblabs/tripmate-be/pkg/identity"
 	"github.com/jblabs/tripmate-be/pkg/response"
 	"github.com/jblabs/tripmate-be/pkg/tripctx"
+	balancedomain "github.com/jblabs/tripmate-be/services/tripmate/v1/domain/balance"
 	fxdomain "github.com/jblabs/tripmate-be/services/tripmate/v1/domain/fx"
 	settlementdomain "github.com/jblabs/tripmate-be/services/tripmate/v1/domain/settlement"
 	tripdomain "github.com/jblabs/tripmate-be/services/tripmate/v1/domain/trip"
@@ -95,6 +96,13 @@ func (f *fakeBalances) Calculate(context.Context, tripctx.TripContext) (*domainb
 }
 func (f *fakeBalances) Summary(context.Context, tripctx.TripContext) (*domainbalance.Summary, error) {
 	return nil, nil
+}
+func (f *fakeBalances) Ledger(context.Context, tripctx.TripContext, balancedomain.LedgerFilter) (*domainbalance.Ledger, error) {
+	f.calls++
+	if f.err != nil {
+		return nil, f.err
+	}
+	return &domainbalance.Ledger{BaseCurrency: "PHP", MemberUserID: actorID, NetBalance: decimal.RequireFromString("80.5")}, nil
 }
 func (f *fakeBalances) OutstandingDebt(context.Context, uuid.UUID, uuid.UUID, uuid.UUID) (decimal.Decimal, error) {
 	return decimal.Zero, nil

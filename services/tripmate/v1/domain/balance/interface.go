@@ -42,9 +42,17 @@ type Dependencies struct {
 	Trips        TripRepository
 }
 
+// LedgerFilter selects whose statement to build and, optionally, narrows every entry down to just
+// the net effect between that member and one other (AgainstUserID nil means "against everyone").
+type LedgerFilter struct {
+	MemberUserID  uuid.UUID
+	AgainstUserID *uuid.UUID
+}
+
 type Service interface {
 	Calculate(context.Context, tripctx.TripContext) (*domainbalance.Result, error)
 	Summary(context.Context, tripctx.TripContext) (*domainbalance.Summary, error)
 	OutstandingDebt(context.Context, uuid.UUID, uuid.UUID, uuid.UUID) (decimal.Decimal, error)
 	FinalSettlement(context.Context, tripctx.TripContext) (*domainbalance.FinalPlan, error)
+	Ledger(context.Context, tripctx.TripContext, LedgerFilter) (*domainbalance.Ledger, error)
 }

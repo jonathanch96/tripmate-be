@@ -32,6 +32,7 @@ func NewController(trips tripdomain.Service, parts participantdomain.Service, ba
 func (c *controller) RegisterRoutes(group *gin.RouterGroup) {
 	member := group.Group("/trips/:code", middleware.RequireTripMember(c.trips, c.parts))
 	member.GET("/balances", c.balancesGet)
+	member.GET("/ledger", c.ledgerGet)
 	member.GET("/final-settlement", c.finalGet)
 	member.GET("/settlements", c.settlementsList)
 	member.POST("/settlements", c.settlementCreate)
@@ -91,6 +92,44 @@ func (c *controller) balancesGet(ctx *gin.Context) {
 		return
 	}
 	response.OK(ctx, "BALANCES_FETCHED", balanceresponse.FromDomain(*result))
+}
+
+// ledgerGet godoc
+// @Summary Get one member's running statement
+// @Tags finance
+// @Produce json
+// @Security BearerAuth
+// @Param code path string true "Trip code"
+// @Param member_user_id query string true "Member to build the statement for"
+// @Param against_user_id query string false "Collapse every entry to the net effect against just this member"
+// @Success 200 {object} response.Envelope{data=balanceresponse.Ledger}
+// @Failure 400 {object} response.Envelope
+// @Failure 401 {object} response.Envelope
+// @Failure 403 {object} response.Envelope
+// @Failure 404 {object} response.Envelope
+// @Failure 422 {object} response.Envelope
+// @Router /trips/{code}/ledger [get]
+func (c *controller) ledgerGet(ctx *gin.Context) {
+	memberID, err := uuid.Parse(ctx.Query("member_user_id"))
+	if err != nil {
+		response.Error(ctx, apperror.New("VALIDATION_FAILED"))
+		return
+	}
+	filter := balancedomain.LedgerFilter{MemberUserID: memberID}
+	if raw := ctx.Query("against_user_id"); raw != "" {
+		against, parseErr := uuid.Parse(raw)
+		if parseErr != nil {
+			response.Error(ctx, apperror.New("VALIDATION_FAILED"))
+			return
+		}
+		filter.AgainstUserID = &against
+	}
+	result, err := c.balances.Ledger(ctx, tripContext(ctx), filter)
+	if err != nil {
+		response.Error(ctx, err)
+		return
+	}
+	response.OK(ctx, "LEDGER_FETCHED", balanceresponse.LedgerFromDomain(*result))
 }
 
 // finalGet godoc
