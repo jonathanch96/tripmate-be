@@ -9,12 +9,13 @@ import (
 )
 
 type Invitation struct {
-	ID        uuid.UUID `json:"id"`
-	TripID    uuid.UUID `json:"trip_id"`
-	Email     string    `json:"email"`
-	Token     string    `json:"token"`
-	Status    string    `json:"status"`
-	ExpiresAt time.Time `json:"expires_at"`
+	ID          uuid.UUID `json:"id"`
+	TripID      uuid.UUID `json:"trip_id"`
+	Email       string    `json:"email"`
+	Token       string    `json:"token"`
+	Status      string    `json:"status"`
+	ExpiresAt   time.Time `json:"expires_at"`
+	HasLoggedIn bool      `json:"has_logged_in"`
 }
 
 type InviteResult struct {
@@ -25,7 +26,10 @@ type InviteResult struct {
 }
 
 func FromDomain(entity domaininvitation.Invitation) Invitation {
-	return Invitation{ID: entity.ID, TripID: entity.TripID, Email: entity.Email, Token: entity.Token, Status: string(entity.Status), ExpiresAt: entity.ExpiresAt}
+	return Invitation{
+		ID: entity.ID, TripID: entity.TripID, Email: entity.Email, Token: entity.Token, Status: string(entity.Status),
+		ExpiresAt: entity.ExpiresAt, HasLoggedIn: entity.HasLoggedIn,
+	}
 }
 
 func FromDomains(entities []domaininvitation.Invitation) []Invitation {

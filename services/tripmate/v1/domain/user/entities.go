@@ -24,6 +24,7 @@ type UpdateProfileInput struct {
 	Name      *string
 	AvatarURL *string
 }
+type ChangePasswordInput struct{ CurrentPassword, NewPassword string }
 
 type Session struct {
 	User                  domainuser.User

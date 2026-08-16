@@ -126,14 +126,32 @@ func (s *service) Accept(ctx context.Context, actor uuid.UUID, email, token stri
 	return p, nil
 }
 func (s *service) ListForMe(ctx context.Context, email string) ([]domaininv.Invitation, error) {
-	return s.repo.ListPendingByEmail(ctx, strings.ToLower(strings.TrimSpace(email)))
+	rows, err := s.repo.ListPendingByEmail(ctx, strings.ToLower(strings.TrimSpace(email)))
+	if err != nil {
+		return nil, err
+	}
+	return s.withLoginStatus(ctx, rows), nil
 }
 func (s *service) ListTrip(ctx context.Context, actor uuid.UUID, code string) ([]domaininv.Invitation, error) {
 	t, err := s.plannerTrip(ctx, actor, code)
 	if err != nil {
 		return nil, err
 	}
-	return s.repo.ListByTrip(ctx, t.ID)
+	rows, err := s.repo.ListByTrip(ctx, t.ID)
+	if err != nil {
+		return nil, err
+	}
+	return s.withLoginStatus(ctx, rows), nil
+}
+
+// withLoginStatus fills in each row's transient HasLoggedIn by looking up its invited email - trip
+// invitation lists are small, so a lookup per row is simpler than adding a batch primitive.
+func (s *service) withLoginStatus(ctx context.Context, rows []domaininv.Invitation) []domaininv.Invitation {
+	for index := range rows {
+		user, err := s.users.FindByEmail(ctx, rows[index].Email)
+		rows[index].HasLoggedIn = err == nil && user != nil && user.LastLoginAt != nil
+	}
+	return rows
 }
 func (s *service) Revoke(ctx context.Context, actor uuid.UUID, code string, id uuid.UUID) error {
 	if _, err := s.ListTrip(ctx, actor, code); err != nil {

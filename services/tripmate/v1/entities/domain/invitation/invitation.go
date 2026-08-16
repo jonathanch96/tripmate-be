@@ -22,4 +22,8 @@ type Invitation struct {
 	ExpiresAt             time.Time
 	AcceptedAt            *time.Time
 	CreatedAt, UpdatedAt  time.Time
+	// HasLoggedIn is not persisted - the invitation service fills it in for listing endpoints by
+	// looking up the invited email's user record, so callers can show "not logged in yet" without
+	// a separate request.
+	HasLoggedIn bool
 }

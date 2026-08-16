@@ -15,6 +15,7 @@ func (c *controller) RegisterRoutes(group *gin.RouterGroup) {
 	users := group.Group("/users")
 	users.GET("/me", c.Me)
 	users.PATCH("/me", c.UpdateMe)
+	users.PATCH("/me/password", c.ChangePassword)
 	users.GET("/lookup", c.Lookup)
 }
 
@@ -62,6 +63,33 @@ func (c *controller) UpdateMe(ctx *gin.Context) {
 		return
 	}
 	response.OK(ctx, "USER_UPDATED", userresp.FromDomain(*entity))
+}
+
+// ChangePassword godoc
+// @Summary Change the current user's password
+// @Tags users
+// @Security BearerAuth
+// @Accept json
+// @Produce json
+// @Param body body userrequest.ChangePassword true "Password change"
+// @Success 200 {object} response.Envelope
+// @Failure 400 {object} response.Envelope
+// @Failure 401 {object} response.Envelope
+// @Router /users/me/password [patch]
+func (c *controller) ChangePassword(ctx *gin.Context) {
+	var request userreq.ChangePassword
+	if err := ctx.ShouldBindJSON(&request); err != nil {
+		response.Error(ctx, apperror.WithFields("VALIDATION_FAILED", appvalidator.Translate(err)))
+		return
+	}
+	current := identity.MustFromContext(ctx.Request.Context())
+	if err := c.users.ChangePassword(ctx.Request.Context(), current.UserID, userdomain.ChangePasswordInput{
+		CurrentPassword: request.CurrentPassword, NewPassword: request.NewPassword,
+	}); err != nil {
+		response.Error(ctx, err)
+		return
+	}
+	response.NoData(ctx, "PASSWORD_CHANGED")
 }
 
 // Lookup godoc

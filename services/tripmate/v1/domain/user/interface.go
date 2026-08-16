@@ -18,6 +18,10 @@ type Service interface {
 	Logout(context.Context, string) error
 	GetByID(context.Context, uuid.UUID) (*domainuser.User, error)
 	UpdateProfile(context.Context, uuid.UUID, UpdateProfileInput) (*domainuser.User, error)
+	// ChangePassword verifies CurrentPassword against the account's existing hash (skipped if the
+	// account has no password yet, e.g. a Google-only sign-in setting one for the first time),
+	// validates NewPassword against the same policy as Register/CreateInvited, and stores it.
+	ChangePassword(context.Context, uuid.UUID, ChangePasswordInput) error
 	FindByEmail(context.Context, string) (*domainuser.User, error)
 	// CreateInvited creates an account - with the password the inviter chose for them - for an
 	// email that was invited to a trip before anyone with that email had signed up. It lets the

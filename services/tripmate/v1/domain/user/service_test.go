@@ -414,7 +414,7 @@ func TestPasswordLoginAgainstAGoogleOnlyAccountIsInvalidCredentials(t *testing.T
 func TestValidatePasswordRequiresLengthAndEveryCharacterClass(t *testing.T) {
 	cases := map[string]bool{
 		"Password1!": true,  // meets every rule
-		"short1!A":   false, // under 8 characters
+		"Sh1!aaa":    false, // under 8 characters
 		"password1!": false, // no uppercase
 		"PASSWORD1!": false, // no lowercase
 		"Password!!": false, // no digit

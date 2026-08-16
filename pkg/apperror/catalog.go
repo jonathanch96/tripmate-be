@@ -15,6 +15,7 @@ var catalog = map[string]definition{
 	"SETTLEMENT_EXCEEDS_DEBT":         {http.StatusBadRequest, "Settlement exceeds the outstanding debt"},
 	"UNAUTHENTICATED":                 {http.StatusUnauthorized, "Authentication is required"},
 	"INVALID_CREDENTIALS":             {http.StatusUnauthorized, "Email or password is incorrect"},
+	"INVALID_CURRENT_PASSWORD":        {http.StatusUnauthorized, "Current password is incorrect"},
 	"FORBIDDEN":                       {http.StatusForbidden, "You are not permitted to perform this action"},
 	"NOT_TRIP_MEMBER":                 {http.StatusForbidden, "You are not a participant of this trip"},
 	"PLANNER_ONLY":                    {http.StatusForbidden, "Only the trip planner can perform this action"},

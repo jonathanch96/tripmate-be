@@ -212,6 +212,32 @@ func (s *service) UpdateProfile(ctx context.Context, id uuid.UUID, input UpdateP
 	return s.deps.Repo.Update(ctx, entity)
 }
 
+func (s *service) ChangePassword(ctx context.Context, id uuid.UUID, input ChangePasswordInput) error {
+	entity, err := s.deps.Repo.GetByID(ctx, id)
+	if err != nil {
+		return err
+	}
+	if entity.PasswordHash != "" {
+		verified, verifyErr := s.deps.Hasher.Verify(input.CurrentPassword, entity.PasswordHash)
+		if verifyErr != nil {
+			return apperror.Wrap(verifyErr, "INTERNAL_ERROR")
+		}
+		if !verified {
+			return apperror.New("INVALID_CURRENT_PASSWORD")
+		}
+	}
+	// entity.PasswordHash == "" means a Google-only account with no password yet - there's nothing
+	// to verify against, so this call sets one for the first time instead of changing it.
+	if fields := ValidatePassword(input.NewPassword); len(fields) > 0 {
+		return apperror.WithFields("VALIDATION_FAILED", fields)
+	}
+	hash, err := s.deps.Hasher.Hash(input.NewPassword)
+	if err != nil {
+		return apperror.Wrap(err, "INTERNAL_ERROR")
+	}
+	return s.deps.Repo.SetPasswordHash(ctx, id, hash)
+}
+
 func (s *service) FindByEmail(ctx context.Context, email string) (*domainuser.User, error) {
 	return s.deps.Repo.GetByEmail(ctx, normalizeEmail(email))
 }
