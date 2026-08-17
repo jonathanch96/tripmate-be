@@ -23,8 +23,11 @@ jobs:
           go-version: ${{ env.GO_VERSION }}
           cache: true
 
+      - name: Generate swagger docs
+        run: make swagger
+
       - name: Arch lint
-        run: make lint-arch
+        run: go run ./tools/archlint
 
       - uses: golangci/golangci-lint-action@v9
         with:
@@ -57,23 +60,6 @@ jobs:
 
       - name: Build
         run: make build
-
-  swagger:
-    name: Swagger drift check
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-
-      - uses: actions/setup-go@v7
-        with:
-          go-version: ${{ env.GO_VERSION }}
-          cache: true
-
-      - name: Regenerate swagger docs
-        run: make swagger
-
-      - name: Fail if docs/ is stale
-        run: git diff --exit-code -- docs/
 
   migrate:
     name: Migrate check
@@ -112,7 +98,7 @@ jobs:
 
   deploy:
     name: SSH Deploy (production)
-    needs: [lint, test, build, swagger, migrate]
+    needs: [lint, test, build, migrate]
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     runs-on: ubuntu-latest
 

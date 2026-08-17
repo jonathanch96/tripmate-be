@@ -7,23 +7,23 @@ endif
 
 MIGRATE_DSN ?= postgres://$(DB_USER):$(DB_PASSWORD)@$(DB_HOST):$(DB_PORT)/$(DB_NAME)?sslmode=$(DB_SSLMODE)&search_path=public
 
-run:
+run: swagger
 	go run ./adapters/rest
 
-build:
+build: swagger
 	go build -o bin/tripmate-api ./adapters/rest
 
-test:
+test: swagger
 	go test ./...
 	go test ./pkg/money -rapid.checks=1000
 
-test-int:
+test-int: swagger
 	go test -tags=integration ./...
 
 lint: lint-arch
 	golangci-lint run
 
-lint-arch:
+lint-arch: swagger
 	go run ./tools/archlint
 
 swagger:
