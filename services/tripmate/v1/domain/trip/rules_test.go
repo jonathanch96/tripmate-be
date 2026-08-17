@@ -39,7 +39,8 @@ func (r *tripRepoFake) Update(_ context.Context, entity *domaintrip.Trip) (*doma
 	r.updated = entity
 	return entity, nil
 }
-func (*tripRepoFake) SoftDelete(context.Context, uuid.UUID) error { return nil }
+func (*tripRepoFake) SoftDelete(context.Context, uuid.UUID) error        { return nil }
+func (*tripRepoFake) SetArchived(context.Context, uuid.UUID, bool) error { return nil }
 
 type participantRepoFake struct {
 	membership *domainparticipant.Participant

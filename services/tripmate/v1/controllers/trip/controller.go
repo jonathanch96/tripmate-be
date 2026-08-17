@@ -27,6 +27,8 @@ func (c *controller) RegisterRoutes(group *gin.RouterGroup) {
 	member.GET("", c.get)
 	planner := group.Group("/trips/:code", middleware.RequirePlanner(c.trips, c.parts))
 	planner.PATCH("", c.update)
+	planner.POST("/archive", c.archive)
+	planner.POST("/unarchive", c.unarchive)
 }
 
 func bind(ctx *gin.Context, value any) bool {
@@ -100,7 +102,12 @@ func (c *controller) create(ctx *gin.Context) {
 func (c *controller) list(ctx *gin.Context) {
 	page, _ := strconv.Atoi(ctx.DefaultQuery("page", "1"))
 	perPage, _ := strconv.Atoi(ctx.DefaultQuery("per_page", "20"))
-	rows, total, err := c.trips.ListMine(ctx, actor(ctx).UserID, tripdomain.ListFilter{Page: page, PerPage: perPage})
+	filter := tripdomain.ListFilter{Page: page, PerPage: perPage}
+	if raw := ctx.Query("archived"); raw != "" {
+		value := raw == "true"
+		filter.Archived = &value
+	}
+	rows, total, err := c.trips.ListMine(ctx, actor(ctx).UserID, filter)
 	if err != nil {
 		response.Error(ctx, err)
 		return
@@ -143,7 +150,7 @@ func (c *controller) update(ctx *gin.Context) {
 		return
 	}
 	entity, err := c.trips.UpdateSettings(ctx, actor(ctx).UserID, ctx.Param("code"), tripdomain.UpdateSettingsInput{
-		Name: &request.Name, BaseCurrency: &request.BaseCurrency,
+		Name: &request.Name, BaseCurrency: &request.BaseCurrency, Country: request.Country,
 		Settings: updateSettings(request), Version: request.Version,
 	})
 	if err != nil {
@@ -151,4 +158,36 @@ func (c *controller) update(ctx *gin.Context) {
 		return
 	}
 	response.OK(ctx, "TRIP_UPDATED", tripresponse.FromDomain(*entity, true))
+}
+
+// archive godoc
+// @Summary Archive a trip
+// @Tags trips
+// @Security BearerAuth
+// @Success 200 {object} response.Envelope{data=tripresponse.Trip}
+// @Failure 400 {object} response.Envelope
+// @Router /trips/{code}/archive [post]
+func (c *controller) archive(ctx *gin.Context) {
+	entity, err := c.trips.Archive(ctx, actor(ctx).UserID, ctx.Param("code"))
+	if err != nil {
+		response.Error(ctx, err)
+		return
+	}
+	response.OK(ctx, "TRIP_ARCHIVED", tripresponse.FromDomain(*entity, true))
+}
+
+// unarchive godoc
+// @Summary Restore an archived trip
+// @Tags trips
+// @Security BearerAuth
+// @Success 200 {object} response.Envelope{data=tripresponse.Trip}
+// @Failure 400 {object} response.Envelope
+// @Router /trips/{code}/unarchive [post]
+func (c *controller) unarchive(ctx *gin.Context) {
+	entity, err := c.trips.Unarchive(ctx, actor(ctx).UserID, ctx.Param("code"))
+	if err != nil {
+		response.Error(ctx, err)
+		return
+	}
+	response.OK(ctx, "TRIP_UNARCHIVED", tripresponse.FromDomain(*entity, true))
 }

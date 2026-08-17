@@ -6,6 +6,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jblabs/tripmate-be/pkg/apperror"
+	"github.com/shopspring/decimal"
 )
 
 type EditPermission string
@@ -30,6 +31,8 @@ type Trip struct {
 	PlannerID            uuid.UUID
 	IsFinalized          bool
 	FinalizedAt          *time.Time
+	IsArchived           bool
+	ArchivedAt           *time.Time
 	Settings             Settings
 	Version              int
 	CreatedAt, UpdatedAt time.Time
@@ -37,6 +40,16 @@ type Trip struct {
 	// expenses are recorded in). Only populated by the trip list query, for the "My trips" cards -
 	// nil elsewhere.
 	Currencies []string
+	// TotalSpend is every approved expense converted into BaseCurrency. Only populated by the trip
+	// list query, for the "My trips" cards - nil elsewhere.
+	TotalSpend *decimal.Decimal
+	// MemberCount is the trip's active participant count. Only populated by the trip list query -
+	// zero elsewhere.
+	MemberCount int
+	// ExpenseTotals holds each currency's raw (unconverted) approved-expense sum, as loaded by the
+	// trip list query. It exists only so ListMine can convert it into TotalSpend once trip-scoped
+	// exchange rates are available, and is never exposed in an API response.
+	ExpenseTotals map[string]decimal.Decimal
 }
 
 func (t Trip) HasEnded(now time.Time) bool {
@@ -53,6 +66,9 @@ func (t Trip) AllowsCurrency(code string) bool {
 func (t Trip) AssertMutable() error {
 	if t.IsFinalized {
 		return apperror.New("TRIP_FINALIZED")
+	}
+	if t.IsArchived {
+		return apperror.New("TRIP_ARCHIVED")
 	}
 	return nil
 }

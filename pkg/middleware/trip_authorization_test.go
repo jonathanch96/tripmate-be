@@ -38,6 +38,12 @@ func (*guardTripService) UpdateSettings(context.Context, uuid.UUID, string, trip
 func (s *guardTripService) FindByCode(context.Context, string) (*domaintrip.Trip, error) {
 	return s.trip, s.err
 }
+func (*guardTripService) Archive(context.Context, uuid.UUID, string) (*domaintrip.Trip, error) {
+	panic("unexpected Archive")
+}
+func (*guardTripService) Unarchive(context.Context, uuid.UUID, string) (*domaintrip.Trip, error) {
+	panic("unexpected Unarchive")
+}
 
 type guardParticipantService struct {
 	participant *domainparticipant.Participant

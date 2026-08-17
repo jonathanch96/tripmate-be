@@ -9,8 +9,10 @@ import (
 	"github.com/google/uuid"
 	"github.com/jblabs/tripmate-be/pkg/apperror"
 	"github.com/jblabs/tripmate-be/pkg/tripctx"
+	fxdomain "github.com/jblabs/tripmate-be/services/tripmate/v1/domain/fx"
 	domainparticipant "github.com/jblabs/tripmate-be/services/tripmate/v1/entities/domain/participant"
 	domaintrip "github.com/jblabs/tripmate-be/services/tripmate/v1/entities/domain/trip"
+	"github.com/shopspring/decimal"
 )
 
 const codeAlphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
@@ -33,6 +35,9 @@ func NewService(deps Dependencies) Service {
 	}
 	if deps.Codes == nil {
 		deps.Codes = CryptoCodeGenerator{}
+	}
+	if deps.FX == nil {
+		deps.FX = NoopFXProvider{}
 	}
 	return &service{deps: deps}
 }
@@ -91,7 +96,46 @@ func (s *service) ListMine(ctx context.Context, actor uuid.UUID, f ListFilter) (
 	if f.PerPage < 1 || f.PerPage > 100 {
 		f.PerPage = 20
 	}
-	return s.deps.Repo.ListByUserID(ctx, actor, f)
+	rows, total, err := s.deps.Repo.ListByUserID(ctx, actor, f)
+	if err != nil {
+		return nil, 0, err
+	}
+	for index := range rows {
+		spend, err := s.totalSpend(ctx, rows[index])
+		if err != nil {
+			return nil, 0, err
+		}
+		rows[index].TotalSpend = &spend
+		rows[index].ExpenseTotals = nil
+	}
+	return rows, total, nil
+}
+
+// totalSpend sums a trip's approved expenses - already grouped by currency in ExpenseTotals - into
+// its base currency. It only fetches the trip's exchange rates when a non-base currency is actually
+// present, since most trips only ever spend in their own base currency.
+func (s *service) totalSpend(ctx context.Context, entity domaintrip.Trip) (decimal.Decimal, error) {
+	spend := decimal.Zero
+	var table *fxdomain.RateTable
+	for currency, amount := range entity.ExpenseTotals {
+		if strings.EqualFold(currency, entity.BaseCurrency) {
+			spend = spend.Add(amount)
+			continue
+		}
+		if table == nil {
+			loaded, err := s.deps.FX.EffectiveTable(ctx, entity.ID)
+			if err != nil {
+				return decimal.Zero, err
+			}
+			table = loaded
+		}
+		converted, convErr := table.Convert(amount, currency, entity.BaseCurrency)
+		if convErr != nil {
+			continue // no rate configured for this currency - excluded, same as the Analytics page
+		}
+		spend = spend.Add(converted)
+	}
+	return spend, nil
 }
 func (s *service) UpdateSettings(ctx context.Context, actor uuid.UUID, code string, in UpdateSettingsInput) (*domaintrip.Trip, error) {
 	entity, err := s.plannerTrip(ctx, actor, code)
@@ -129,9 +173,40 @@ func (s *service) UpdateSettings(ctx context.Context, actor uuid.UUID, code stri
 	if in.Name != nil {
 		entity.Name = strings.TrimSpace(*in.Name)
 	}
+	if in.Country != nil {
+		entity.Country = trimmedOrNil(in.Country)
+	}
 	entity.Settings = in.Settings
 	entity.Version = in.Version
 	return s.deps.Repo.Update(ctx, entity)
+}
+
+func (s *service) Archive(ctx context.Context, actor uuid.UUID, code string) (*domaintrip.Trip, error) {
+	entity, err := s.plannerTrip(ctx, actor, code)
+	if err != nil {
+		return nil, err
+	}
+	if entity.IsArchived {
+		return nil, apperror.WithFields("VALIDATION_FAILED", []apperror.FieldError{{Field: "is_archived", Rule: "already_archived", Message: "trip is already archived"}})
+	}
+	if err := s.deps.Repo.SetArchived(ctx, entity.ID, true); err != nil {
+		return nil, err
+	}
+	return s.deps.Repo.GetByID(ctx, entity.ID)
+}
+
+func (s *service) Unarchive(ctx context.Context, actor uuid.UUID, code string) (*domaintrip.Trip, error) {
+	entity, err := s.plannerTrip(ctx, actor, code)
+	if err != nil {
+		return nil, err
+	}
+	if !entity.IsArchived {
+		return nil, apperror.WithFields("VALIDATION_FAILED", []apperror.FieldError{{Field: "is_archived", Rule: "not_archived", Message: "trip is not archived"}})
+	}
+	if err := s.deps.Repo.SetArchived(ctx, entity.ID, false); err != nil {
+		return nil, err
+	}
+	return s.deps.Repo.GetByID(ctx, entity.ID)
 }
 
 func (s *service) plannerTrip(ctx context.Context, actor uuid.UUID, code string) (*domaintrip.Trip, error) {

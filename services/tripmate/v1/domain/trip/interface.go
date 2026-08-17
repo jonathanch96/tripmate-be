@@ -4,11 +4,16 @@ import (
 	"context"
 
 	"github.com/google/uuid"
+	fxdomain "github.com/jblabs/tripmate-be/services/tripmate/v1/domain/fx"
 	domainparticipant "github.com/jblabs/tripmate-be/services/tripmate/v1/entities/domain/participant"
 	domaintrip "github.com/jblabs/tripmate-be/services/tripmate/v1/entities/domain/trip"
 )
 
-type ListFilter struct{ Page, PerPage int }
+// ListFilter.Archived is nil for "both", true for archived-only, false for active-only.
+type ListFilter struct {
+	Page, PerPage int
+	Archived      *bool
+}
 type Repository interface {
 	Create(context.Context, *domaintrip.Trip) (*domaintrip.Trip, error)
 	GetByID(context.Context, uuid.UUID) (*domaintrip.Trip, error)
@@ -16,7 +21,11 @@ type Repository interface {
 	ExistsByCode(context.Context, string) (bool, error)
 	ListByUserID(context.Context, uuid.UUID, ListFilter) ([]domaintrip.Trip, int64, error)
 	Update(context.Context, *domaintrip.Trip) (*domaintrip.Trip, error)
+	SetArchived(context.Context, uuid.UUID, bool) error
 	SoftDelete(context.Context, uuid.UUID) error
+}
+type FXProvider interface {
+	EffectiveTable(context.Context, uuid.UUID) (*fxdomain.RateTable, error)
 }
 type ParticipantRepository interface {
 	Create(context.Context, *domainparticipant.Participant) (*domainparticipant.Participant, error)
@@ -36,4 +45,6 @@ type Service interface {
 	ListMine(context.Context, uuid.UUID, ListFilter) ([]domaintrip.Trip, int64, error)
 	UpdateSettings(context.Context, uuid.UUID, string, UpdateSettingsInput) (*domaintrip.Trip, error)
 	FindByCode(context.Context, string) (*domaintrip.Trip, error)
+	Archive(context.Context, uuid.UUID, string) (*domaintrip.Trip, error)
+	Unarchive(context.Context, uuid.UUID, string) (*domaintrip.Trip, error)
 }

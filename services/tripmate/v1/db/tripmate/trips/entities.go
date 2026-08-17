@@ -18,6 +18,8 @@ type Trip struct {
 	PlannerID           uuid.UUID      `gorm:"column:planner_id"`
 	IsFinalized         bool           `gorm:"column:is_finalized"`
 	FinalizedAt         *time.Time     `gorm:"column:finalized_at"`
+	IsArchived          bool           `gorm:"column:is_archived"`
+	ArchivedAt          *time.Time     `gorm:"column:archived_at"`
 	EditPermission      string         `gorm:"column:setting_edit_permission"`
 	ApprovalExpenses    bool           `gorm:"column:setting_approval_expenses"`
 	ApprovalSettlements bool           `gorm:"column:setting_approval_settlements"`

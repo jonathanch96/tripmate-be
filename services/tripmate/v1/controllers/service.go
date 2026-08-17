@@ -91,7 +91,8 @@ func NewService(deps Dependencies) *Service {
 	expenseRepo := expensesdb.New(deps.DB)
 	receiptRepo := receiptsdb.New(deps.DB)
 	categoryRepo := categoriesdb.New(deps.DB)
-	tripService := tripdomain.NewService(tripdomain.Dependencies{Repo: tripRepo, Participants: partRepo, Tx: tripTransactor{deps.DB}, Expenses: expenseRepo})
+	rateService := fxdomain.NewService(fxdomain.Dependencies{Repo: ratesdb.New(deps.DB), UOW: appdb.NewGormUnitOfWork(deps.DB)})
+	tripService := tripdomain.NewService(tripdomain.Dependencies{Repo: tripRepo, Participants: partRepo, Tx: tripTransactor{deps.DB}, Expenses: expenseRepo, FX: rateService})
 	partService := participantdomain.NewService(partRepo, tripRepo, expenseRepo)
 	categoryService := expensecategorydomain.NewService(categoryRepo)
 	expenseService := expensedomain.NewService(expensedomain.Dependencies{
@@ -101,7 +102,6 @@ func NewService(deps Dependencies) *Service {
 	})
 	receiptService := receiptdomain.NewService(receiptdomain.Dependencies{Repo: receiptRepo, Participants: partRepo,
 		Storage: deps.Storage, OCR: deps.OCR, Expenses: expenseService, UOW: appdb.NewGormUnitOfWork(deps.DB)})
-	rateService := fxdomain.NewService(fxdomain.Dependencies{Repo: ratesdb.New(deps.DB), UOW: appdb.NewGormUnitOfWork(deps.DB)})
 	settlementRepo := settlementsdb.New(deps.DB)
 	balanceService := balancedomain.NewService(balancedomain.Dependencies{Expenses: expenseRepo, Settlements: settlementRepo, Participants: partRepo, FX: rateService})
 	settlementService := settlementdomain.NewService(settlementdomain.Dependencies{Repo: settlementRepo, Participants: partRepo, Outbox: outboxdb.New(deps.DB), UOW: appdb.NewGormUnitOfWork(deps.DB)})
