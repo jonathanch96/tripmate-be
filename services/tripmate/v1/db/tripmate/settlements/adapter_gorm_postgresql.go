@@ -117,3 +117,15 @@ func (a *adapterGormPostgresql) SoftDelete(ctx context.Context, id uuid.UUID) er
 	}
 	return nil
 }
+
+// HasActivity implements participant.ActivityCounter.
+func (a *adapterGormPostgresql) HasActivity(ctx context.Context, tripID, userID uuid.UUID) (bool, error) {
+	var count int64
+	err := appdb.FromContext(ctx, a.db).WithContext(ctx).Model(&Settlement{}).
+		Where("trip_id = ? AND (from_user_id = ? OR to_user_id = ?)", tripID, userID, userID).
+		Count(&count).Error
+	if err != nil {
+		return false, apperror.Wrap(err, "INTERNAL_ERROR")
+	}
+	return count > 0, nil
+}

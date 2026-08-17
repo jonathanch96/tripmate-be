@@ -33,6 +33,24 @@ func (NoopActivityCounter) HasActivity(context.Context, uuid.UUID, uuid.UUID) (b
 	return false, nil
 }
 
+// CompositeActivityCounter reports activity if any of its counters does, so removal can be
+// blocked by financial history that lives in more than one repository (e.g. expenses and
+// settlements).
+type CompositeActivityCounter []ActivityCounter
+
+func (c CompositeActivityCounter) HasActivity(ctx context.Context, tripID, userID uuid.UUID) (bool, error) {
+	for _, counter := range c {
+		active, err := counter.HasActivity(ctx, tripID, userID)
+		if err != nil {
+			return false, err
+		}
+		if active {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 type Service interface {
 	Join(context.Context, uuid.UUID, string) (*domainparticipant.Participant, error)
 	Add(context.Context, uuid.UUID, string, uuid.UUID) (*domainparticipant.Participant, error)

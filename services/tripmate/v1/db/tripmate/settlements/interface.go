@@ -17,6 +17,7 @@ type Repository interface {
 	ListApprovedByTripID(context.Context, uuid.UUID) ([]domainsettlement.Settlement, error)
 	ListForBalance(context.Context, uuid.UUID) ([]domainsettlement.Settlement, error)
 	SoftDelete(context.Context, uuid.UUID) error
+	HasActivity(context.Context, uuid.UUID, uuid.UUID) (bool, error)
 }
 
 var _ Repository = (*adapterGormPostgresql)(nil)
