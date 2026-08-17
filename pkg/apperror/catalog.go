@@ -22,6 +22,7 @@ var catalog = map[string]definition{
 	"EDIT_OWN_ONLY":                   {http.StatusForbidden, "You can only edit your own records"},
 	"TRIP_FINALIZED":                  {http.StatusForbidden, "The trip has been finalized"},
 	"SETTLEMENT_NOT_ALLOWED_YET":      {http.StatusForbidden, "Settlements are not allowed before the trip ends"},
+	"RECEIPT_IMAGE_LINK_INVALID":      {http.StatusForbidden, "This receipt image link is invalid or has expired"},
 	"USER_NOT_FOUND":                  {http.StatusNotFound, "User not found"},
 	"TRIP_NOT_FOUND":                  {http.StatusNotFound, "Trip not found"},
 	"EXPENSE_NOT_FOUND":               {http.StatusNotFound, "Expense not found"},

@@ -13,9 +13,11 @@ import (
 	"github.com/jblabs/tripmate-be/adapters/rest/config"
 	"github.com/jblabs/tripmate-be/adapters/rest/handlers"
 	_ "github.com/jblabs/tripmate-be/docs"
+	"github.com/jblabs/tripmate-be/pkg/apperror"
 	appLogger "github.com/jblabs/tripmate-be/pkg/logger"
 	"github.com/jblabs/tripmate-be/pkg/ocr"
 	"github.com/jblabs/tripmate-be/pkg/ocr/gemini"
+	"github.com/jblabs/tripmate-be/pkg/response"
 	"github.com/jblabs/tripmate-be/pkg/storage"
 	tripmate "github.com/jblabs/tripmate-be/services/tripmate/v1/controllers"
 	receiptdomain "github.com/jblabs/tripmate-be/services/tripmate/v1/domain/receipt"
@@ -83,13 +85,13 @@ func registerRoutes(engine *gin.Engine, cfg *config.Config, db *gorm.DB, log *sl
 		v1.GET("/receipt-images/*key", func(c *gin.Context) {
 			expires, err := strconv.ParseInt(c.Query("expires"), 10, 64)
 			if err != nil {
-				c.Status(http.StatusForbidden)
+				response.Error(c, apperror.New("RECEIPT_IMAGE_LINK_INVALID"))
 				return
 			}
 			key := strings.TrimPrefix(c.Param("key"), "/")
 			file, err := localStore.Open(key, c.Query("signature"), expires)
 			if err != nil {
-				c.Status(http.StatusForbidden)
+				response.Error(c, apperror.New("RECEIPT_IMAGE_LINK_INVALID"))
 				return
 			}
 			defer func() { _ = file.Close() }()

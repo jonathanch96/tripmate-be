@@ -39,7 +39,7 @@ func bind(ctx *gin.Context, value any) bool {
 // @Tags expense-categories
 // @Security BearerAuth
 // @Param code path string true "Trip code"
-// @Success 200 {object} response.Envelope{data=[]categoryresponse.ExpenseCategory}
+// @Success 200 {object} response.Envelope{data=[]expensecategoryresponse.ExpenseCategory}
 // @Failure 403 {object} response.Envelope
 // @Router /trips/{code}/expense-categories [get]
 func (c *controller) list(ctx *gin.Context) {
@@ -57,8 +57,8 @@ func (c *controller) list(ctx *gin.Context) {
 // @Tags expense-categories
 // @Security BearerAuth
 // @Param code path string true "Trip code"
-// @Param body body categoryrequest.Create true "Category"
-// @Success 201 {object} response.Envelope{data=categoryresponse.ExpenseCategory}
+// @Param body body expensecategoryrequest.Create true "Category"
+// @Success 201 {object} response.Envelope{data=expensecategoryresponse.ExpenseCategory}
 // @Failure 403 {object} response.Envelope
 // @Failure 409 {object} response.Envelope
 // @Router /trips/{code}/expense-categories [post]

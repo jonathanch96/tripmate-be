@@ -15,6 +15,63 @@ const docTemplate = `{
     "host": "{{.Host}}",
     "basePath": "{{.BasePath}}",
     "paths": {
+        "/auth/google": {
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "auth"
+                ],
+                "summary": "Sign in with a verified Google ID token",
+                "parameters": [
+                    {
+                        "description": "Google ID token",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/authrequest.Google"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/response.Envelope"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/authresponse.Session"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/response.Envelope"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/response.Envelope"
+                        }
+                    }
+                }
+            }
+        },
         "/auth/login": {
             "post": {
                 "consumes": [
@@ -707,6 +764,227 @@ const docTemplate = `{
                     },
                     "401": {
                         "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/response.Envelope"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/response.Envelope"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/response.Envelope"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
+                        "schema": {
+                            "$ref": "#/definitions/response.Envelope"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "tags": [
+                    "finance"
+                ],
+                "summary": "Delete a trip exchange rate",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Trip code",
+                        "name": "code",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "From currency",
+                        "name": "from",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "To currency",
+                        "name": "to",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.Envelope"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/response.Envelope"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/response.Envelope"
+                        }
+                    }
+                }
+            }
+        },
+        "/trips/{code}/expense-categories": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "tags": [
+                    "expense-categories"
+                ],
+                "summary": "List expense categories for a trip",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Trip code",
+                        "name": "code",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/response.Envelope"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/definitions/expensecategoryresponse.ExpenseCategory"
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/response.Envelope"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "tags": [
+                    "expense-categories"
+                ],
+                "summary": "Add a custom expense category to a trip",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Trip code",
+                        "name": "code",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Category",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/expensecategoryrequest.Create"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/response.Envelope"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/expensecategoryresponse.ExpenseCategory"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/response.Envelope"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/response.Envelope"
+                        }
+                    }
+                }
+            }
+        },
+        "/trips/{code}/expense-categories/{id}": {
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "tags": [
+                    "expense-categories"
+                ],
+                "summary": "Remove a custom expense category from a trip",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Trip code",
+                        "name": "code",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Category ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/response.Envelope"
                         }
@@ -1465,6 +1743,94 @@ const docTemplate = `{
                     },
                     "409": {
                         "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/response.Envelope"
+                        }
+                    }
+                }
+            }
+        },
+        "/trips/{code}/ledger": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "finance"
+                ],
+                "summary": "Get one member's running statement",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Trip code",
+                        "name": "code",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Member to build the statement for",
+                        "name": "member_user_id",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Collapse every entry to the net effect against just this member",
+                        "name": "against_user_id",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/response.Envelope"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/balanceresponse.Ledger"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/response.Envelope"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/response.Envelope"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/response.Envelope"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/response.Envelope"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
                         "schema": {
                             "$ref": "#/definitions/response.Envelope"
                         }
@@ -2794,9 +3160,70 @@ const docTemplate = `{
                     }
                 }
             }
+        },
+        "/users/me/password": {
+            "patch": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "users"
+                ],
+                "summary": "Change the current user's password",
+                "parameters": [
+                    {
+                        "description": "Password change",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/userrequest.ChangePassword"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.Envelope"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/response.Envelope"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/response.Envelope"
+                        }
+                    }
+                }
+            }
         }
     },
     "definitions": {
+        "authrequest.Google": {
+            "type": "object",
+            "required": [
+                "id_token"
+            ],
+            "properties": {
+                "id_token": {
+                    "type": "string"
+                }
+            }
+        },
         "authrequest.Login": {
             "type": "object",
             "required": [
@@ -2902,6 +3329,68 @@ const docTemplate = `{
                     "items": {
                         "$ref": "#/definitions/balanceresponse.Transfer"
                     }
+                }
+            }
+        },
+        "balanceresponse.Ledger": {
+            "type": "object",
+            "properties": {
+                "against_user_id": {
+                    "type": "string"
+                },
+                "base_currency": {
+                    "type": "string"
+                },
+                "entries": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/balanceresponse.LedgerEntry"
+                    }
+                },
+                "member_user_id": {
+                    "type": "string"
+                },
+                "net_balance": {
+                    "type": "string"
+                }
+            }
+        },
+        "balanceresponse.LedgerEntry": {
+            "type": "object",
+            "properties": {
+                "category_id": {
+                    "type": "string"
+                },
+                "counterparty_user_id": {
+                    "type": "string"
+                },
+                "date": {
+                    "type": "string"
+                },
+                "delta": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "expense_id": {
+                    "type": "string"
+                },
+                "kind": {
+                    "type": "string"
+                },
+                "paid": {
+                    "description": "Paid/Share are only present for expense rows in the unfiltered (\"against everyone\") view.",
+                    "type": "string"
+                },
+                "running_balance": {
+                    "type": "string"
+                },
+                "settlement_id": {
+                    "type": "string"
+                },
+                "share": {
+                    "type": "string"
                 }
             }
         },
@@ -3019,6 +3508,12 @@ const docTemplate = `{
                 "email": {
                     "type": "string"
                 },
+                "has_account": {
+                    "type": "boolean"
+                },
+                "has_logged_in": {
+                    "type": "boolean"
+                },
                 "id": {
                     "type": "string"
                 },
@@ -3026,6 +3521,35 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "updated_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "expensecategoryrequest.Create": {
+            "type": "object",
+            "required": [
+                "name"
+            ],
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "maxLength": 50
+                }
+            }
+        },
+        "expensecategoryresponse.ExpenseCategory": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "string"
+                },
+                "is_default": {
+                    "type": "boolean"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "trip_id": {
                     "type": "string"
                 }
             }
@@ -3042,6 +3566,16 @@ const docTemplate = `{
             ],
             "properties": {
                 "amount": {
+                    "type": "string"
+                },
+                "category_id": {
+                    "type": "string"
+                },
+                "charged_amount": {
+                    "description": "ChargedAmount and ChargedCurrency are an optional record of what the payer's card or account\nactually showed. ChargedAmount is only read when ChargedCurrency is also set.",
+                    "type": "string"
+                },
+                "charged_currency": {
                     "type": "string"
                 },
                 "currency": {
@@ -3075,7 +3609,9 @@ const docTemplate = `{
                     "enum": [
                         "equal",
                         "manual",
-                        "item"
+                        "item",
+                        "percent",
+                        "shares"
                     ]
                 },
                 "splits": {
@@ -3125,6 +3661,9 @@ const docTemplate = `{
                 },
                 "user_id": {
                     "type": "string"
+                },
+                "weight": {
+                    "type": "string"
                 }
             }
         },
@@ -3135,6 +3674,16 @@ const docTemplate = `{
             ],
             "properties": {
                 "amount": {
+                    "type": "string"
+                },
+                "category_id": {
+                    "type": "string"
+                },
+                "charged_amount": {
+                    "description": "ChargedAmount and ChargedCurrency follow the same convention as CategoryID: omitted means\n\"leave unchanged\", a non-empty ChargedCurrency sets both fields, and an explicit empty-string\nChargedCurrency clears both back to unset.",
+                    "type": "string"
+                },
+                "charged_currency": {
                     "type": "string"
                 },
                 "currency": {
@@ -3199,6 +3748,15 @@ const docTemplate = `{
                 },
                 "can_reject": {
                     "type": "boolean"
+                },
+                "category_id": {
+                    "type": "string"
+                },
+                "charged_amount": {
+                    "type": "string"
+                },
+                "charged_currency": {
+                    "type": "string"
                 },
                 "created_at": {
                     "type": "string"
@@ -3281,6 +3839,9 @@ const docTemplate = `{
                 },
                 "user_id": {
                     "type": "string"
+                },
+                "weight": {
+                    "type": "string"
                 }
             }
         },
@@ -3295,6 +3856,12 @@ const docTemplate = `{
                 },
                 "email": {
                     "type": "string"
+                },
+                "has_account": {
+                    "type": "boolean"
+                },
+                "has_logged_in": {
+                    "type": "boolean"
                 },
                 "id": {
                     "type": "string"
@@ -3356,12 +3923,18 @@ const docTemplate = `{
         "invitationrequest.Create": {
             "type": "object",
             "required": [
-                "email"
+                "email",
+                "password"
             ],
             "properties": {
                 "email": {
                     "type": "string",
                     "maxLength": 255
+                },
+                "password": {
+                    "type": "string",
+                    "maxLength": 128,
+                    "minLength": 8
                 }
             }
         },
@@ -3373,6 +3946,9 @@ const docTemplate = `{
                 },
                 "expires_at": {
                     "type": "string"
+                },
+                "has_logged_in": {
+                    "type": "boolean"
                 },
                 "id": {
                     "type": "string"
@@ -3444,6 +4020,10 @@ const docTemplate = `{
                 "bank_info": {
                     "$ref": "#/definitions/participantrequest.BankInfo"
                 },
+                "display_name": {
+                    "type": "string",
+                    "maxLength": 120
+                },
                 "role": {
                     "type": "string",
                     "enum": [
@@ -3473,6 +4053,9 @@ const docTemplate = `{
                 "bank_info": {
                     "$ref": "#/definitions/participantresponse.BankInfo"
                 },
+                "display_name": {
+                    "type": "string"
+                },
                 "id": {
                     "type": "string"
                 },
@@ -3501,6 +4084,12 @@ const docTemplate = `{
                 },
                 "email": {
                     "type": "string"
+                },
+                "has_account": {
+                    "type": "boolean"
+                },
+                "has_logged_in": {
+                    "type": "boolean"
                 },
                 "id": {
                     "type": "string"
@@ -3903,6 +4492,12 @@ const docTemplate = `{
                 "email": {
                     "type": "string"
                 },
+                "has_account": {
+                    "type": "boolean"
+                },
+                "has_logged_in": {
+                    "type": "boolean"
+                },
                 "id": {
                     "type": "string"
                 },
@@ -3935,6 +4530,10 @@ const docTemplate = `{
                 },
                 "base_currency": {
                     "type": "string"
+                },
+                "country": {
+                    "type": "string",
+                    "maxLength": 80
                 },
                 "edit_permission": {
                     "type": "string",
@@ -4031,6 +4630,16 @@ const docTemplate = `{
                 "code": {
                     "type": "string"
                 },
+                "country": {
+                    "type": "string"
+                },
+                "currencies": {
+                    "description": "Currencies is only populated on the trip list endpoint - every currency actually used on the\ntrip, base currency first. Omitted (not just empty) elsewhere.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
                 "end_date": {
                     "type": "string"
                 },
@@ -4054,6 +4663,27 @@ const docTemplate = `{
                 },
                 "version": {
                     "type": "integer"
+                }
+            }
+        },
+        "userrequest.ChangePassword": {
+            "type": "object",
+            "required": [
+                "confirm_password",
+                "new_password"
+            ],
+            "properties": {
+                "confirm_password": {
+                    "type": "string"
+                },
+                "current_password": {
+                    "type": "string",
+                    "maxLength": 128
+                },
+                "new_password": {
+                    "type": "string",
+                    "maxLength": 128,
+                    "minLength": 8
                 }
             }
         },
@@ -4095,6 +4725,12 @@ const docTemplate = `{
                 },
                 "email": {
                     "type": "string"
+                },
+                "has_account": {
+                    "type": "boolean"
+                },
+                "has_logged_in": {
+                    "type": "boolean"
                 },
                 "id": {
                     "type": "string"

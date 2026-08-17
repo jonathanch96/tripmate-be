@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jblabs/tripmate-be/pkg/apperror"
+	"github.com/jblabs/tripmate-be/pkg/money"
 	"github.com/jblabs/tripmate-be/pkg/tripctx"
 	fxdomain "github.com/jblabs/tripmate-be/services/tripmate/v1/domain/fx"
 	domainbalance "github.com/jblabs/tripmate-be/services/tripmate/v1/entities/domain/balance"
@@ -20,10 +21,6 @@ import (
 	domainuser "github.com/jblabs/tripmate-be/services/tripmate/v1/entities/domain/user"
 	"github.com/shopspring/decimal"
 )
-
-// ledgerEpsilon mirrors the money package's rounding tolerance: a delta this small is rounding
-// noise, not a real transaction, and is left out of a member's statement entirely.
-var ledgerEpsilon = decimal.NewFromFloat(0.005)
 
 type service struct{ deps Dependencies }
 
@@ -242,7 +239,7 @@ func (s *service) Ledger(ctx context.Context, tc tripctx.TripContext, filter Led
 				}
 				share = share.Add(amount)
 			}
-			if delta := paid.Sub(share); delta.Abs().GreaterThan(ledgerEpsilon) {
+			if delta := paid.Sub(share); delta.Abs().GreaterThan(money.Epsilon) {
 				drafts = append(drafts, draft{kind: domainbalance.LedgerEntryExpense, date: expense.ExpenseDate, expenseID: &id,
 					description: expense.Description, categoryID: expense.CategoryID, paid: &paid, share: &share, delta: delta})
 			}
@@ -282,7 +279,7 @@ func (s *service) Ledger(ctx context.Context, tc tripctx.TripContext, filter Led
 				}
 			}
 		}
-		if delta.Abs().GreaterThan(ledgerEpsilon) {
+		if delta.Abs().GreaterThan(money.Epsilon) {
 			counterparty := against
 			drafts = append(drafts, draft{kind: domainbalance.LedgerEntryExpense, date: expense.ExpenseDate, expenseID: &id,
 				description: expense.Description, categoryID: expense.CategoryID, counterpartyUserID: &counterparty, delta: delta})
