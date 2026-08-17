@@ -569,6 +569,45 @@ const docTemplate = `{
                 }
             }
         },
+        "/trips/{code}/archive": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "tags": [
+                    "trips"
+                ],
+                "summary": "Archive a trip",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/response.Envelope"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/tripresponse.Trip"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/response.Envelope"
+                        }
+                    }
+                }
+            }
+        },
         "/trips/{code}/balances": {
             "get": {
                 "security": [
@@ -2945,6 +2984,45 @@ const docTemplate = `{
                 }
             }
         },
+        "/trips/{code}/unarchive": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "tags": [
+                    "trips"
+                ],
+                "summary": "Restore an archived trip",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/response.Envelope"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/tripresponse.Trip"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/response.Envelope"
+                        }
+                    }
+                }
+            }
+        },
         "/trips/{code}/unfinalize": {
             "post": {
                 "security": [
@@ -4578,6 +4656,10 @@ const docTemplate = `{
                 "base_currency": {
                     "type": "string"
                 },
+                "country": {
+                    "type": "string",
+                    "maxLength": 80
+                },
                 "edit_permission": {
                     "type": "string",
                     "enum": [
@@ -4621,6 +4703,9 @@ const docTemplate = `{
         "tripresponse.Trip": {
             "type": "object",
             "properties": {
+                "archived_at": {
+                    "type": "string"
+                },
                 "base_currency": {
                     "type": "string"
                 },
@@ -4634,7 +4719,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "currencies": {
-                    "description": "Currencies is only populated on the trip list endpoint - every currency actually used on the\ntrip, base currency first. Omitted (not just empty) elsewhere.",
+                    "description": "Currencies, MemberCount and TotalSpend are only populated on the trip list endpoint. Currencies\nis every currency actually used on the trip, base currency first (omitted, not just empty,\nelsewhere). MemberCount and TotalSpend are omitted (zero-valued) elsewhere too.",
                     "type": "array",
                     "items": {
                         "type": "string"
@@ -4646,8 +4731,14 @@ const docTemplate = `{
                 "id": {
                     "type": "string"
                 },
+                "is_archived": {
+                    "type": "boolean"
+                },
                 "is_finalized": {
                     "type": "boolean"
+                },
+                "member_count": {
+                    "type": "integer"
                 },
                 "name": {
                     "type": "string"
@@ -4659,6 +4750,9 @@ const docTemplate = `{
                     "$ref": "#/definitions/tripresponse.Settings"
                 },
                 "start_date": {
+                    "type": "string"
+                },
+                "total_spend": {
                     "type": "string"
                 },
                 "version": {

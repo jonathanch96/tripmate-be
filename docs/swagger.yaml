@@ -920,6 +920,9 @@ definitions:
         type: boolean
       base_currency:
         type: string
+      country:
+        maxLength: 80
+        type: string
       edit_permission:
         enum:
         - everyone
@@ -954,6 +957,8 @@ definitions:
     type: object
   tripresponse.Trip:
     properties:
+      archived_at:
+        type: string
       base_currency:
         type: string
       can_edit_settings:
@@ -964,8 +969,9 @@ definitions:
         type: string
       currencies:
         description: |-
-          Currencies is only populated on the trip list endpoint - every currency actually used on the
-          trip, base currency first. Omitted (not just empty) elsewhere.
+          Currencies, MemberCount and TotalSpend are only populated on the trip list endpoint. Currencies
+          is every currency actually used on the trip, base currency first (omitted, not just empty,
+          elsewhere). MemberCount and TotalSpend are omitted (zero-valued) elsewhere too.
         items:
           type: string
         type: array
@@ -973,8 +979,12 @@ definitions:
         type: string
       id:
         type: string
+      is_archived:
+        type: boolean
       is_finalized:
         type: boolean
+      member_count:
+        type: integer
       name:
         type: string
       planner_id:
@@ -982,6 +992,8 @@ definitions:
       settings:
         $ref: '#/definitions/tripresponse.Settings'
       start_date:
+        type: string
+      total_spend:
         type: string
       version:
         type: integer
@@ -1367,6 +1379,27 @@ paths:
       security:
       - BearerAuth: []
       summary: Update trip settings
+      tags:
+      - trips
+  /trips/{code}/archive:
+    post:
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Envelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/tripresponse.Trip'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      security:
+      - BearerAuth: []
+      summary: Archive a trip
       tags:
       - trips
   /trips/{code}/balances:
@@ -2793,6 +2826,27 @@ paths:
       summary: Reject a pending settlement
       tags:
       - settlements
+  /trips/{code}/unarchive:
+    post:
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Envelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/tripresponse.Trip'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      security:
+      - BearerAuth: []
+      summary: Restore an archived trip
+      tags:
+      - trips
   /trips/{code}/unfinalize:
     post:
       parameters:
