@@ -123,9 +123,10 @@ func (f *fakeBalances) FinalSettlement(context.Context, tripctx.TripContext) (*d
 type fakeSettlements struct {
 	err                            error
 	records, approvals, rejections int
-	deletes                        int
+	deletes, updates               int
 	lastFilter                     settlementdomain.Filter
 	lastInput                      settlementdomain.RecordInput
+	lastUpdateInput                settlementdomain.UpdateInput
 	lastReason                     string
 	statusOnRecord                 domainsettlement.Status
 }
@@ -172,6 +173,14 @@ func (f *fakeSettlements) List(_ context.Context, _ tripctx.TripContext, filter 
 func (f *fakeSettlements) Delete(context.Context, identity.Identity, tripctx.TripContext, uuid.UUID) error {
 	f.deletes++
 	return f.err
+}
+func (f *fakeSettlements) Update(_ context.Context, _ identity.Identity, _ tripctx.TripContext, _ uuid.UUID, in settlementdomain.UpdateInput) (*domainsettlement.Settlement, error) {
+	f.updates++
+	f.lastUpdateInput = in
+	if f.err != nil {
+		return nil, f.err
+	}
+	return f.row(domainsettlement.StatusPending), nil
 }
 
 type fakeFX struct {
@@ -288,10 +297,11 @@ func TestEveryRouteIsRegisteredWithItsSuccessCode(t *testing.T) {
 		{name: "final settlement", method: http.MethodGet, path: "/api/v1/trips/ABC123/final-settlement", code: "FINAL_SETTLEMENT_FETCHED", status: http.StatusOK},
 		{name: "list settlements", method: http.MethodGet, path: "/api/v1/trips/ABC123/settlements", code: "SETTLEMENTS_FETCHED", status: http.StatusOK},
 		{name: "create settlement", method: http.MethodPost, path: "/api/v1/trips/ABC123/settlements",
-			body: `{"from_user_id":"00000000-0000-0000-0000-0000000000b2","to_user_id":"00000000-0000-0000-0000-0000000000b1","amount":"50","currency":"PHP","method":"cash"}`,
+			body: `{"from_user_id":"00000000-0000-0000-0000-0000000000b2","to_user_id":"00000000-0000-0000-0000-0000000000b1","amount":"50","currency":"PHP","method":"cash","date":"2026-08-01"}`,
 			code: "SETTLEMENT_CREATED", status: http.StatusCreated},
 		{name: "trip rates", method: http.MethodGet, path: "/api/v1/trips/ABC123/exchange-rates", code: "RATES_FETCHED", status: http.StatusOK},
 		{name: "global rates", method: http.MethodGet, path: "/api/v1/exchange-rates", code: "RATES_FETCHED", status: http.StatusOK},
+		{name: "update", method: http.MethodPatch, path: "/api/v1/trips/ABC123/settlements/" + rowID.String(), body: `{"amount":"75","version":1}`, code: "SETTLEMENT_UPDATED", status: http.StatusOK},
 		{name: "approve", method: http.MethodPost, path: "/api/v1/trips/ABC123/settlements/" + rowID.String() + "/approve", code: "SETTLEMENT_APPROVED", status: http.StatusOK},
 		{name: "reject", method: http.MethodPost, path: "/api/v1/trips/ABC123/settlements/" + rowID.String() + "/reject", body: `{"reason":"duplicate"}`, code: "SETTLEMENT_REJECTED", status: http.StatusOK},
 		{name: "delete", method: http.MethodDelete, path: "/api/v1/trips/ABC123/settlements/" + rowID.String(), code: "SETTLEMENT_DELETED", status: http.StatusOK},
@@ -313,6 +323,7 @@ func TestPlannerOnlyRoutesRejectMembers(t *testing.T) {
 	for _, route := range []struct {
 		name, method, path, body string
 	}{
+		{name: "update", method: http.MethodPatch, path: "/api/v1/trips/ABC123/settlements/" + rowID.String(), body: `{"amount":"75","version":1}`},
 		{name: "approve", method: http.MethodPost, path: "/api/v1/trips/ABC123/settlements/" + rowID.String() + "/approve"},
 		{name: "reject", method: http.MethodPost, path: "/api/v1/trips/ABC123/settlements/" + rowID.String() + "/reject", body: `{"reason":"duplicate"}`},
 		{name: "delete", method: http.MethodDelete, path: "/api/v1/trips/ABC123/settlements/" + rowID.String()},
@@ -520,7 +531,7 @@ func TestDomainErrorCodesSurviveTheController(t *testing.T) {
 			h := newHarness(domainparticipant.RolePlanner)
 			h.settlements.err = apperror.New(test.code)
 			recorder := h.do(http.MethodPost, "/api/v1/trips/ABC123/settlements",
-				`{"from_user_id":"00000000-0000-0000-0000-0000000000b2","to_user_id":"00000000-0000-0000-0000-0000000000b1","amount":"50","currency":"PHP","method":"cash"}`)
+				`{"from_user_id":"00000000-0000-0000-0000-0000000000b2","to_user_id":"00000000-0000-0000-0000-0000000000b1","amount":"50","currency":"PHP","method":"cash","date":"2026-08-01"}`)
 			envelope := decode(t, recorder)
 			if envelope.Code != test.code {
 				t.Fatalf("code = %s, want %s", envelope.Code, test.code)

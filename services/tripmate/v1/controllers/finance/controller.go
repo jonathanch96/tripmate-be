@@ -2,6 +2,7 @@ package finance
 
 import (
 	"strconv"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -38,6 +39,7 @@ func (c *controller) RegisterRoutes(group *gin.RouterGroup) {
 	member.POST("/settlements", c.settlementCreate)
 	member.GET("/exchange-rates", c.ratesTrip)
 	planner := group.Group("/trips/:code", middleware.RequirePlanner(c.trips, c.parts))
+	planner.PATCH("/settlements/:id", c.settlementUpdate)
 	planner.POST("/settlements/:id/approve", c.approve)
 	planner.POST("/settlements/:id/reject", c.reject)
 	planner.DELETE("/settlements/:id", c.delete)
@@ -186,7 +188,7 @@ func (c *controller) settlementsList(ctx *gin.Context) {
 		response.Error(ctx, err)
 		return
 	}
-	response.List(ctx, "SETTLEMENTS_FETCHED", settlementresponse.ListFromDomain(rows),
+	response.List(ctx, "SETTLEMENTS_FETCHED", settlementresponse.ListFromDomain(rows, tripContext(ctx)),
 		response.Pagination{Page: filter.Page, PerPage: filter.PerPage, TotalItems: total, TotalPages: (int(total) + filter.PerPage - 1) / filter.PerPage})
 }
 
@@ -225,13 +227,76 @@ func (c *controller) settlementCreate(ctx *gin.Context) {
 		response.Error(ctx, apperror.New("VALIDATION_FAILED"))
 		return
 	}
+	settledDate, err := time.Parse("2006-01-02", body.Date)
+	if err != nil {
+		response.Error(ctx, apperror.New("VALIDATION_FAILED"))
+		return
+	}
 	row, err := c.settlements.Record(ctx, actor(ctx), tripContext(ctx), settlementdomain.RecordInput{FromUserID: from, ToUserID: to,
-		Amount: amount, Currency: body.Currency, Method: domainsettlement.Method(body.Method), Note: body.Note, ProofURL: body.ProofURL})
+		Amount: amount, Currency: body.Currency, Method: domainsettlement.Method(body.Method), Note: body.Note, ProofURL: body.ProofURL, Date: settledDate})
 	if err != nil {
 		response.Error(ctx, err)
 		return
 	}
-	response.Created(ctx, "SETTLEMENT_CREATED", settlementresponse.FromDomain(*row))
+	response.Created(ctx, "SETTLEMENT_CREATED", settlementresponse.FromDomain(*row, tripContext(ctx)))
+}
+
+// settlementUpdate godoc
+// @Summary Edit a settlement
+// @Tags settlements
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param code path string true "Trip code"
+// @Param id path string true "Settlement ID"
+// @Param body body settlementrequest.Update true "Fields to change"
+// @Success 200 {object} response.Envelope{data=settlementresponse.Settlement}
+// @Failure 400 {object} response.Envelope
+// @Failure 401 {object} response.Envelope
+// @Failure 403 {object} response.Envelope
+// @Failure 404 {object} response.Envelope
+// @Failure 409 {object} response.Envelope
+// @Failure 422 {object} response.Envelope
+// @Router /trips/{code}/settlements/{id} [patch]
+func (c *controller) settlementUpdate(ctx *gin.Context) {
+	id, ok := settlementID(ctx)
+	if !ok {
+		return
+	}
+	var body settlementrequest.Update
+	if !bind(ctx, &body) {
+		return
+	}
+	input := settlementdomain.UpdateInput{Note: body.Note, ProofURL: body.ProofURL, Version: body.Version}
+	if body.Amount != nil {
+		amount, amountErr := decimal.NewFromString(*body.Amount)
+		if amountErr != nil {
+			response.Error(ctx, apperror.New("VALIDATION_FAILED"))
+			return
+		}
+		input.Amount = &amount
+	}
+	if body.Currency != nil {
+		input.Currency = body.Currency
+	}
+	if body.Method != nil {
+		method := domainsettlement.Method(*body.Method)
+		input.Method = &method
+	}
+	if body.Date != nil {
+		settledDate, dateErr := time.Parse("2006-01-02", *body.Date)
+		if dateErr != nil {
+			response.Error(ctx, apperror.New("VALIDATION_FAILED"))
+			return
+		}
+		input.Date = &settledDate
+	}
+	row, err := c.settlements.Update(ctx, actor(ctx), tripContext(ctx), id, input)
+	if err != nil {
+		response.Error(ctx, err)
+		return
+	}
+	response.OK(ctx, "SETTLEMENT_UPDATED", settlementresponse.FromDomain(*row, tripContext(ctx)))
 }
 
 // approve godoc
@@ -257,7 +322,7 @@ func (c *controller) approve(ctx *gin.Context) {
 		response.Error(ctx, err)
 		return
 	}
-	response.OK(ctx, "SETTLEMENT_APPROVED", settlementresponse.FromDomain(*row))
+	response.OK(ctx, "SETTLEMENT_APPROVED", settlementresponse.FromDomain(*row, tripContext(ctx)))
 }
 
 // reject godoc
@@ -290,7 +355,7 @@ func (c *controller) reject(ctx *gin.Context) {
 		response.Error(ctx, err)
 		return
 	}
-	response.OK(ctx, "SETTLEMENT_REJECTED", settlementresponse.FromDomain(*row))
+	response.OK(ctx, "SETTLEMENT_REJECTED", settlementresponse.FromDomain(*row, tripContext(ctx)))
 }
 
 // delete godoc

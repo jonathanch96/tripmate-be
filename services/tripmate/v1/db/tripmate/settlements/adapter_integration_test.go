@@ -73,7 +73,7 @@ func seedSettlements(t *testing.T, db *gorm.DB, count int) seeded {
 		// Distinct created_at values so the DESC page cut is deterministic: row i is i minutes old.
 		models[i] = Settlement{ID: uuid.New(), TripID: tripID, FromUserID: from, ToUserID: to,
 			Amount: decimal.NewFromInt(int64(i + 1)), Currency: "PHP", Method: method,
-			Status: statuses[i%3], CreatedByUserID: from, Version: 1,
+			Status: statuses[i%3], CreatedByUserID: from, Version: 1, SettlementDate: time.Now().UTC(),
 			CreatedAt: time.Now().UTC().Add(-time.Duration(count-i) * time.Minute),
 			UpdatedAt: time.Now().UTC()}
 	}
@@ -266,7 +266,7 @@ func TestBankDetailsAreStoredAsASnapshot(t *testing.T) {
 	row := &domainsettlement.Settlement{ID: uuid.New(), TripID: fixture.tripID, FromUserID: fixture.memberID, ToUserID: fixture.plannerID,
 		Amount: decimal.NewFromInt(25), Currency: "PHP", Method: domainsettlement.MethodBankTransfer,
 		BankName: &bankName, BankAccountNumber: &accountNumber, BankAccountHolder: &accountHolder,
-		Status: domainsettlement.StatusApproved, CreatedByUserID: fixture.memberID, Version: 1,
+		Status: domainsettlement.StatusApproved, CreatedByUserID: fixture.memberID, Version: 1, SettlementDate: time.Now().UTC(),
 		CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC()}
 	created, err := repo.Create(ctx, row)
 	if err != nil {

@@ -5,6 +5,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jblabs/tripmate-be/pkg/money"
+	"github.com/jblabs/tripmate-be/pkg/tripctx"
 	domainparticipant "github.com/jblabs/tripmate-be/services/tripmate/v1/entities/domain/participant"
 	domainsettlement "github.com/jblabs/tripmate-be/services/tripmate/v1/entities/domain/settlement"
 	domainuser "github.com/jblabs/tripmate-be/services/tripmate/v1/entities/domain/user"
@@ -34,26 +35,34 @@ type Settlement struct {
 	ApprovedBy        *uuid.UUID `json:"approved_by_user_id"`
 	ApprovedAt        *time.Time `json:"approved_at"`
 	RejectedReason    *string    `json:"rejected_reason"`
+	CanEdit           bool       `json:"can_edit"`
+	CanDelete         bool       `json:"can_delete"`
+	Date              string     `json:"date"`
 	Version           int        `json:"version"`
 	CreatedAt         time.Time  `json:"created_at"`
 	UpdatedAt         time.Time  `json:"updated_at"`
 }
 
-func FromDomain(entity domainsettlement.Settlement) Settlement {
+func FromDomain(entity domainsettlement.Settlement, tc tripctx.TripContext) Settlement {
 	result := Settlement{ID: entity.ID, TripID: entity.TripID, FromUserID: entity.FromUserID, ToUserID: entity.ToUserID,
 		Amount: entity.Amount.StringFixedBank(money.DisplayScale(entity.Currency)), Currency: entity.Currency,
 		Method: string(entity.Method), Status: string(entity.Status), BankName: entity.BankName,
 		BankAccountNumber: maskAccount(entity.BankAccountNumber), BankAccountHolder: entity.BankAccountHolder,
 		Note: entity.Note, ProofURL: entity.ProofURL, ApprovedBy: entity.ApprovedByUserID, ApprovedAt: entity.ApprovedAt,
-		RejectedReason: entity.RejectedReason, Version: entity.Version, CreatedAt: entity.CreatedAt, UpdatedAt: entity.UpdatedAt}
+		RejectedReason: entity.RejectedReason, Date: entity.SettlementDate.Format("2006-01-02"), Version: entity.Version,
+		CreatedAt: entity.CreatedAt, UpdatedAt: entity.UpdatedAt}
 	result.FromUser, result.ToUser = publicUser(entity.FromUser), publicUser(entity.ToUser)
+	// Approval no longer gates editability - it only decides whether the ledger counts this
+	// settlement - so both flags collapse to a single planner-only check.
+	allowed := tc.Participant.Role == domainparticipant.RolePlanner
+	result.CanEdit, result.CanDelete = allowed, allowed
 	return result
 }
 
-func ListFromDomain(entities []domainsettlement.Settlement) []Settlement {
+func ListFromDomain(entities []domainsettlement.Settlement, tc tripctx.TripContext) []Settlement {
 	rows := make([]Settlement, len(entities))
 	for i, entity := range entities {
-		rows[i] = FromDomain(entity)
+		rows[i] = FromDomain(entity, tc)
 	}
 	return rows
 }

@@ -33,5 +33,8 @@ type Settlement struct {
 	RejectedReason                                    *string
 	Version                                           int
 	FromUser, ToUser                                  *domainuser.PublicUser
-	CreatedAt, UpdatedAt                              time.Time
+	// SettlementDate is the user-editable date the payment actually happened, distinct from
+	// CreatedAt (when the record was entered into the system).
+	SettlementDate       time.Time
+	CreatedAt, UpdatedAt time.Time
 }

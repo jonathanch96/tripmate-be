@@ -42,7 +42,13 @@ func (a *adapterGormPostgresql) GetByID(ctx context.Context, id uuid.UUID) (*dom
 }
 func (a *adapterGormPostgresql) Update(ctx context.Context, e *domainsettlement.Settlement) (*domainsettlement.Settlement, error) {
 	m := fromDomain(*e)
-	r := appdb.FromContext(ctx, a.db).WithContext(ctx).Model(&Settlement{}).Where("id=? AND version=?", e.ID, e.Version).Updates(map[string]any{"status": m.Status, "approved_by_user_id": m.ApprovedByUserID, "approved_at": m.ApprovedAt, "rejected_reason": m.RejectedReason, "version": gorm.Expr("version+1"), "updated_at": gorm.Expr("now()")})
+	r := appdb.FromContext(ctx, a.db).WithContext(ctx).Model(&Settlement{}).Where("id=? AND version=?", e.ID, e.Version).Updates(map[string]any{
+		"amount": m.Amount, "currency": m.Currency, "method": m.Method,
+		"bank_name": m.BankName, "bank_account_number": m.BankAccountNumber, "bank_account_holder": m.BankAccountHolder,
+		"note": m.Note, "proof_url": m.ProofURL, "settlement_date": m.SettlementDate,
+		"status": m.Status, "approved_by_user_id": m.ApprovedByUserID, "approved_at": m.ApprovedAt, "rejected_reason": m.RejectedReason,
+		"version": gorm.Expr("version+1"), "updated_at": gorm.Expr("now()"),
+	})
 	if r.Error != nil {
 		return nil, apperror.Wrap(r.Error, "INTERNAL_ERROR")
 	}

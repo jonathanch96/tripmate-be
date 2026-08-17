@@ -27,6 +27,16 @@ type RecordInput struct {
 	Currency             string
 	Method               domainsettlement.Method
 	Note, ProofURL       *string
+	Date                 time.Time
+}
+
+type UpdateInput struct {
+	Amount         *decimal.Decimal
+	Currency       *string
+	Method         *domainsettlement.Method
+	Note, ProofURL *string
+	Date           *time.Time
+	Version        int
 }
 
 type Repository interface {
@@ -54,6 +64,7 @@ type Dependencies struct {
 
 type Service interface {
 	Record(context.Context, identity.Identity, tripctx.TripContext, RecordInput) (*domainsettlement.Settlement, error)
+	Update(context.Context, identity.Identity, tripctx.TripContext, uuid.UUID, UpdateInput) (*domainsettlement.Settlement, error)
 	Approve(context.Context, identity.Identity, tripctx.TripContext, uuid.UUID) (*domainsettlement.Settlement, error)
 	Reject(context.Context, identity.Identity, tripctx.TripContext, uuid.UUID, string) (*domainsettlement.Settlement, error)
 	List(context.Context, tripctx.TripContext, Filter) ([]domainsettlement.Settlement, int64, error)

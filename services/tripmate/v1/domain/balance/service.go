@@ -300,11 +300,11 @@ func (s *service) Ledger(ctx context.Context, tc tripctx.TripContext, filter Led
 		switch {
 		case sent:
 			counterparty := to
-			drafts = append(drafts, draft{kind: domainbalance.LedgerEntrySettlement, date: settlement.CreatedAt, settlementID: &id,
+			drafts = append(drafts, draft{kind: domainbalance.LedgerEntrySettlement, date: settlement.SettlementDate, settlementID: &id,
 				description: "Settlement", counterpartyUserID: &counterparty, delta: amount})
 		case received:
 			counterparty := from
-			drafts = append(drafts, draft{kind: domainbalance.LedgerEntrySettlement, date: settlement.CreatedAt, settlementID: &id,
+			drafts = append(drafts, draft{kind: domainbalance.LedgerEntrySettlement, date: settlement.SettlementDate, settlementID: &id,
 				description: "Settlement", counterpartyUserID: &counterparty, delta: amount.Neg()})
 		}
 	}

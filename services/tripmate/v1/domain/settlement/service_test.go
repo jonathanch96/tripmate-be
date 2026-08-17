@@ -188,35 +188,114 @@ func TestRejectRequiresAReason(t *testing.T) {
 	}
 }
 
-// S-10: delete is planner-only and never touches an approved settlement.
+// S-10: delete is planner-only.
 func TestDeleteGuards(t *testing.T) {
+	svc, repo, _, actor, tc, from, to := fixture(true)
+	created, err := svc.Record(context.Background(), actor, tc, RecordInput{FromUserID: from, ToUserID: to, Amount: decimal.NewFromInt(50), Currency: "PHP", Method: domainsettlement.MethodCash})
+	if err != nil {
+		t.Fatal(err)
+	}
+	tc.Participant.Role = domainparticipant.RoleParticipant
+	if err = svc.Delete(context.Background(), actor, tc, created.ID); !apperror.Is(err, "PLANNER_ONLY") {
+		t.Fatalf("error = %v, want PLANNER_ONLY", err)
+	}
+	if repo.row == nil {
+		t.Fatal("settlement was deleted despite the guard")
+	}
+}
+
+// Approval is a review gate on the ledger, not on editability - an approved settlement must
+// still be deletable by the planner.
+func TestDeleteAllowsAnApprovedSettlement(t *testing.T) {
+	svc, repo, _, actor, tc, from, to := fixture(true)
+	created, err := svc.Record(context.Background(), actor, tc, RecordInput{FromUserID: from, ToUserID: to, Amount: decimal.NewFromInt(50), Currency: "PHP", Method: domainsettlement.MethodCash})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = svc.Approve(context.Background(), actor, tc, created.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err = svc.Delete(context.Background(), actor, tc, created.ID); err != nil {
+		t.Fatalf("error = %v, want nil", err)
+	}
+	if repo.row != nil {
+		t.Fatal("settlement was not deleted")
+	}
+}
+
+func TestUpdateRequiresPlanner(t *testing.T) {
+	svc, _, _, actor, tc, from, to := fixture(true)
+	created, err := svc.Record(context.Background(), actor, tc, RecordInput{FromUserID: from, ToUserID: to, Amount: decimal.NewFromInt(50), Currency: "PHP", Method: domainsettlement.MethodCash})
+	if err != nil {
+		t.Fatal(err)
+	}
+	tc.Participant.Role = domainparticipant.RoleParticipant
+	amount := decimal.NewFromInt(75)
+	if _, err = svc.Update(context.Background(), actor, tc, created.ID, UpdateInput{Amount: &amount, Version: created.Version}); !apperror.Is(err, "PLANNER_ONLY") {
+		t.Fatalf("error = %v, want PLANNER_ONLY", err)
+	}
+}
+
+// Editing an approved (or rejected) settlement invalidates that decision - it must go back to
+// pending for re-review rather than silently keeping stale approval on changed figures.
+func TestUpdateResetsApprovedSettlementToPendingWhenApprovalRequired(t *testing.T) {
+	svc, _, _, actor, tc, from, to := fixture(true)
+	created, err := svc.Record(context.Background(), actor, tc, RecordInput{FromUserID: from, ToUserID: to, Amount: decimal.NewFromInt(50), Currency: "PHP", Method: domainsettlement.MethodCash})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = svc.Approve(context.Background(), actor, tc, created.ID); err != nil {
+		t.Fatal(err)
+	}
+	amount := decimal.NewFromInt(75)
+	updated, err := svc.Update(context.Background(), actor, tc, created.ID, UpdateInput{Amount: &amount, Version: created.Version + 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.Status != domainsettlement.StatusPending || !updated.Amount.Equal(amount) || updated.ApprovedAt != nil || updated.ApprovedByUserID != nil {
+		t.Fatalf("updated = %+v, want pending with amount=75 and cleared approval", updated)
+	}
+}
+
+// When the trip does not require approval, everything lands (and stays) approved - editing must
+// not demote a settlement into a review state nobody asked for.
+func TestUpdateLeavesApprovedStatusAloneWhenApprovalNotRequired(t *testing.T) {
+	svc, _, _, actor, tc, from, to := fixture(false)
+	created, err := svc.Record(context.Background(), actor, tc, RecordInput{FromUserID: from, ToUserID: to, Amount: decimal.NewFromInt(50), Currency: "PHP", Method: domainsettlement.MethodCash})
+	if err != nil {
+		t.Fatal(err)
+	}
+	amount := decimal.NewFromInt(75)
+	updated, err := svc.Update(context.Background(), actor, tc, created.ID, UpdateInput{Amount: &amount, Version: created.Version})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.Status != domainsettlement.StatusApproved {
+		t.Fatalf("status = %s, want approved", updated.Status)
+	}
+}
+
+func TestUpdateValidatesFields(t *testing.T) {
 	for _, test := range []struct {
-		name, code string
-		approve    bool
-		asMember   bool
+		name   string
+		mutate func(*UpdateInput)
+		code   string
 	}{
-		{name: "member cannot delete", code: "PLANNER_ONLY", asMember: true},
-		{name: "approved settlements cannot be deleted", code: "VALIDATION_FAILED", approve: true},
+		{"non-positive amount", func(in *UpdateInput) { amount := decimal.NewFromInt(0); in.Amount = &amount }, "VALIDATION_FAILED"},
+		{"unsupported currency", func(in *UpdateInput) { currency := "XYZ"; in.Currency = &currency }, "INVALID_CURRENCY"},
+		{"unknown method", func(in *UpdateInput) { method := domainsettlement.Method("crypto"); in.Method = &method }, "VALIDATION_FAILED"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			svc, repo, _, actor, tc, from, to := fixture(true)
+			svc, _, _, actor, tc, from, to := fixture(true)
 			created, err := svc.Record(context.Background(), actor, tc, RecordInput{FromUserID: from, ToUserID: to, Amount: decimal.NewFromInt(50), Currency: "PHP", Method: domainsettlement.MethodCash})
 			if err != nil {
 				t.Fatal(err)
 			}
-			if test.approve {
-				if _, err = svc.Approve(context.Background(), actor, tc, created.ID); err != nil {
-					t.Fatal(err)
-				}
-			}
-			if test.asMember {
-				tc.Participant.Role = domainparticipant.RoleParticipant
-			}
-			if err = svc.Delete(context.Background(), actor, tc, created.ID); !apperror.Is(err, test.code) {
+			in := UpdateInput{Version: created.Version}
+			test.mutate(&in)
+			_, err = svc.Update(context.Background(), actor, tc, created.ID, in)
+			if !apperror.Is(err, test.code) {
 				t.Fatalf("error = %v, want %s", err, test.code)
-			}
-			if repo.row == nil {
-				t.Fatal("settlement was deleted despite the guard")
 			}
 		})
 	}

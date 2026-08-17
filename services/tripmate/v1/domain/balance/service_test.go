@@ -227,7 +227,7 @@ func TestLedgerUnfilteredExcludesSelfTransactionsAndTracksRunningBalance(t *test
 	shared := domainexpense.Expense{ID: uuid.New(), ExpenseDate: day1, Description: "Group dinner", Currency: "PHP", Status: domainexpense.StatusApproved,
 		Payers: []domainexpense.Payer{{UserID: a, Amount: decimal.NewFromInt(120)}},
 		Splits: []domainexpense.Split{{UserID: a, Amount: decimal.NewFromInt(40)}, {UserID: b, Amount: decimal.NewFromInt(40)}, {UserID: c, Amount: decimal.NewFromInt(40)}}}
-	settlement := domainsettlement.Settlement{ID: uuid.New(), FromUserID: c, ToUserID: a, Amount: decimal.NewFromInt(10), Currency: "PHP", Status: domainsettlement.StatusApproved, CreatedAt: day2}
+	settlement := domainsettlement.Settlement{ID: uuid.New(), FromUserID: c, ToUserID: a, Amount: decimal.NewFromInt(10), Currency: "PHP", Status: domainsettlement.StatusApproved, SettlementDate: day2}
 	service := balancedomain.NewService(balancedomain.Dependencies{Expenses: expenseRows{selfOnly, shared}, Settlements: settlementRows{settlement}, Participants: participants, FX: tableProvider{table: fxdomain.NewRateTable(nil)}})
 
 	result, err := service.Ledger(context.Background(), tripctx.TripContext{Trip: domaintrip.Trip{ID: uuid.New(), BaseCurrency: "PHP"}}, balancedomain.LedgerFilter{MemberUserID: a})
@@ -294,7 +294,7 @@ func TestLedgerPairwiseSkipsSelfSharesAndComputesNetBetweenTwoMembers(t *testing
 func TestLedgerSettlementDirectionsAndFiltering(t *testing.T) {
 	a, b, c := uuid.UUID{15: 1}, uuid.UUID{15: 2}, uuid.UUID{15: 3}
 	participants := participantRows{participant(a, "Ana"), participant(b, "Ben"), participant(c, "Cara")}
-	settlement := domainsettlement.Settlement{ID: uuid.New(), FromUserID: a, ToUserID: b, Amount: decimal.NewFromInt(50), Currency: "PHP", Status: domainsettlement.StatusApproved, CreatedAt: time.Now()}
+	settlement := domainsettlement.Settlement{ID: uuid.New(), FromUserID: a, ToUserID: b, Amount: decimal.NewFromInt(50), Currency: "PHP", Status: domainsettlement.StatusApproved, SettlementDate: time.Now()}
 	service := balancedomain.NewService(balancedomain.Dependencies{Expenses: expenseRows{}, Settlements: settlementRows{settlement}, Participants: participants, FX: tableProvider{table: fxdomain.NewRateTable(nil)}})
 	trip := tripctx.TripContext{Trip: domaintrip.Trip{ID: uuid.New(), BaseCurrency: "PHP"}}
 

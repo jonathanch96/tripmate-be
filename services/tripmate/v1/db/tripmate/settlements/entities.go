@@ -24,6 +24,7 @@ type Settlement struct {
 	RejectedReason                                 *string
 	CreatedByUserID                                uuid.UUID
 	Version                                        int
+	SettlementDate                                 time.Time
 	CreatedAt, UpdatedAt                           time.Time
 	DeletedAt                                      gorm.DeletedAt
 	TotalCount                                     int64   `gorm:"column:total_count;->"`
