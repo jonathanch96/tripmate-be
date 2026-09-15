@@ -14,9 +14,13 @@ type Create struct {
 }
 
 type Update struct {
-	Name                        string  `json:"name" binding:"required,notblank,max=160"`
-	BaseCurrency                string  `json:"base_currency" binding:"required,len=3"`
-	Country                     *string `json:"country" binding:"omitempty,max=80"`
+	Name         string  `json:"name" binding:"required,notblank,max=160"`
+	BaseCurrency string  `json:"base_currency" binding:"required,len=3"`
+	Country      *string `json:"country" binding:"omitempty,max=80"`
+	// Dates are optional so a client that only edits settings can keep omitting them; when sent,
+	// they move the trip's window.
+	StartDate                   *string `json:"start_date" binding:"omitempty,datetime=2006-01-02"`
+	EndDate                     *string `json:"end_date" binding:"omitempty,datetime=2006-01-02"`
 	EditPermission              string  `json:"edit_permission" binding:"required,oneof=everyone own_only"`
 	ApprovalRequiredExpenses    bool    `json:"approval_required_expenses"`
 	ApprovalRequiredSettlements bool    `json:"approval_required_settlements"`

@@ -43,13 +43,16 @@ func actor(ctx *gin.Context) identity.Identity {
 	return identity.MustFromContext(ctx.Request.Context())
 }
 
+// Holding several currencies and settling up before the trip ends are no longer per-trip
+// choices - every trip allows both. The request fields stay in the contract so existing clients
+// keep validating, but whatever they send is ignored in favour of the fixed values.
 func createSettings(request triprequest.Create) domaintrip.Settings {
 	return domaintrip.Settings{
 		EditPermission:              domaintrip.EditPermission(request.EditPermission),
 		ApprovalRequiredExpenses:    request.ApprovalRequiredExpenses,
 		ApprovalRequiredSettlements: request.ApprovalRequiredSettlements,
-		MultiCurrencyEnabled:        request.MultiCurrencyEnabled,
-		AllowSettlementBeforeEnd:    request.AllowSettlementBeforeEnd,
+		MultiCurrencyEnabled:        true,
+		AllowSettlementBeforeEnd:    true,
 	}
 }
 
@@ -58,9 +61,27 @@ func updateSettings(request triprequest.Update) domaintrip.Settings {
 		EditPermission:              domaintrip.EditPermission(request.EditPermission),
 		ApprovalRequiredExpenses:    request.ApprovalRequiredExpenses,
 		ApprovalRequiredSettlements: request.ApprovalRequiredSettlements,
-		MultiCurrencyEnabled:        request.MultiCurrencyEnabled,
-		AllowSettlementBeforeEnd:    request.AllowSettlementBeforeEnd,
+		MultiCurrencyEnabled:        true,
+		AllowSettlementBeforeEnd:    true,
 	}
+}
+
+// optionalDates parses the two dates an update may carry. The binding tag already rejects a
+// malformed date, so a parse failure here can only mean a shape the tag let through.
+func optionalDates(ctx *gin.Context, rawStart, rawEnd *string) (*time.Time, *time.Time, bool) {
+	parsed := make([]*time.Time, 2)
+	for index, raw := range []*string{rawStart, rawEnd} {
+		if raw == nil || *raw == "" {
+			continue
+		}
+		value, err := time.Parse("2006-01-02", *raw)
+		if err != nil {
+			response.Error(ctx, apperror.WithFields("VALIDATION_FAILED", []apperror.FieldError{{Field: "start_date", Rule: "datetime", Message: "dates must use YYYY-MM-DD"}}))
+			return nil, nil, false
+		}
+		parsed[index] = &value
+	}
+	return parsed[0], parsed[1], true
 }
 
 // create godoc
@@ -149,8 +170,13 @@ func (c *controller) update(ctx *gin.Context) {
 	if !bind(ctx, &request) {
 		return
 	}
+	startDate, endDate, ok := optionalDates(ctx, request.StartDate, request.EndDate)
+	if !ok {
+		return
+	}
 	entity, err := c.trips.UpdateSettings(ctx, actor(ctx).UserID, ctx.Param("code"), tripdomain.UpdateSettingsInput{
 		Name: &request.Name, BaseCurrency: &request.BaseCurrency, Country: request.Country,
+		StartDate: startDate, EndDate: endDate,
 		Settings: updateSettings(request), Version: request.Version,
 	})
 	if err != nil {

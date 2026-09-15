@@ -157,6 +157,42 @@ func TestUpdateSettingsProtectsBaseCurrencyAfterFirstExpense(t *testing.T) {
 	}
 }
 
+func TestUpdateSettingsMovesTheTripWindow(t *testing.T) {
+	actor := uuid.New()
+	start := time.Date(2026, 8, 24, 0, 0, 0, 0, time.UTC)
+	end := time.Date(2026, 8, 28, 0, 0, 0, 0, time.UTC)
+	entity := domaintrip.Trip{ID: uuid.New(), Code: "ABC123", BaseCurrency: "USD", StartDate: start, EndDate: end, Version: 2}
+	membership := domainparticipant.Participant{TripID: entity.ID, UserID: actor, Role: domainparticipant.RolePlanner}
+	ctx := tripctx.WithContext(context.Background(), tripctx.TripContext{Trip: entity, Participant: membership})
+	repo := &tripRepoFake{}
+	service := NewService(Dependencies{Repo: repo})
+	nextEnd := time.Date(2026, 9, 2, 0, 0, 0, 0, time.UTC)
+
+	if _, err := service.UpdateSettings(ctx, actor, entity.Code, UpdateSettingsInput{EndDate: &nextEnd, Settings: entity.Settings, Version: entity.Version}); err != nil {
+		t.Fatalf("UpdateSettings() error = %v", err)
+	}
+	if repo.updated == nil || !repo.updated.EndDate.Equal(nextEnd) || !repo.updated.StartDate.Equal(start) {
+		t.Fatalf("UpdateSettings() stored = %+v, want end %v and an untouched start", repo.updated, nextEnd)
+	}
+}
+
+func TestUpdateSettingsRejectsAnEndDateBeforeTheStoredStart(t *testing.T) {
+	actor := uuid.New()
+	start := time.Date(2026, 8, 24, 0, 0, 0, 0, time.UTC)
+	entity := domaintrip.Trip{ID: uuid.New(), Code: "ABC123", BaseCurrency: "USD", StartDate: start, EndDate: start.AddDate(0, 0, 4), Version: 2}
+	membership := domainparticipant.Participant{TripID: entity.ID, UserID: actor, Role: domainparticipant.RolePlanner}
+	ctx := tripctx.WithContext(context.Background(), tripctx.TripContext{Trip: entity, Participant: membership})
+	repo := &tripRepoFake{}
+	service := NewService(Dependencies{Repo: repo})
+	// Only the end moves, so the check has to compare it against the start already on the trip.
+	tooEarly := start.AddDate(0, 0, -1)
+
+	_, err := service.UpdateSettings(ctx, actor, entity.Code, UpdateSettingsInput{EndDate: &tooEarly, Settings: entity.Settings, Version: entity.Version})
+	if !apperror.Is(err, "VALIDATION_FAILED") || repo.updated != nil {
+		t.Fatalf("UpdateSettings() error = %v, updated = %+v", err, repo.updated)
+	}
+}
+
 func TestCreateRejectsInvalidCurrencyAndBackwardsDates(t *testing.T) {
 	service := NewService(Dependencies{})
 	now := time.Date(2026, 8, 6, 0, 0, 0, 0, time.UTC)
