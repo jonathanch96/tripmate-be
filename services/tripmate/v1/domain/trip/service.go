@@ -176,6 +176,21 @@ func (s *service) UpdateSettings(ctx context.Context, actor uuid.UUID, code stri
 	if in.Country != nil {
 		entity.Country = trimmedOrNil(in.Country)
 	}
+	// Either end of the window can move on its own, so the order check runs against the pair that
+	// would actually be stored, not just the field that was sent.
+	if in.StartDate != nil || in.EndDate != nil {
+		start, end := entity.StartDate, entity.EndDate
+		if in.StartDate != nil {
+			start = date(*in.StartDate)
+		}
+		if in.EndDate != nil {
+			end = date(*in.EndDate)
+		}
+		if end.Before(start) {
+			return nil, apperror.WithFields("VALIDATION_FAILED", []apperror.FieldError{{Field: "end_date", Rule: "dateafter", Message: "end_date must be on or after start_date"}})
+		}
+		entity.StartDate, entity.EndDate = start, end
+	}
 	entity.Settings = in.Settings
 	entity.Version = in.Version
 	return s.deps.Repo.Update(ctx, entity)

@@ -25,11 +25,12 @@ type CreateInput struct {
 	Settings           domaintrip.Settings
 }
 type UpdateSettingsInput struct {
-	Name         *string
-	BaseCurrency *string
-	Country      *string
-	Settings     domaintrip.Settings
-	Version      int
+	Name               *string
+	BaseCurrency       *string
+	Country            *string
+	StartDate, EndDate *time.Time
+	Settings           domaintrip.Settings
+	Version            int
 }
 type NoopExpenseCounter struct{}
 

@@ -203,6 +203,7 @@ func (a *adapterGormPostgresql) Update(ctx context.Context, entity *domaintrip.T
 	model := fromDomain(*entity)
 	result := a.db.WithContext(ctx).Model(&Trip{}).Where("id = ? AND version = ?", entity.ID, entity.Version).Updates(map[string]any{
 		"name": model.Name, "base_currency": model.BaseCurrency, "country": model.Country,
+		"start_date": model.StartDate, "end_date": model.EndDate,
 		"setting_edit_permission": model.EditPermission, "setting_approval_expenses": model.ApprovalExpenses,
 		"setting_approval_settlements":        model.ApprovalSettlements,
 		"setting_multi_currency_enabled":      model.MultiCurrency,
