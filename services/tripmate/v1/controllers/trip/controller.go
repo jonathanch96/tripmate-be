@@ -43,13 +43,16 @@ func actor(ctx *gin.Context) identity.Identity {
 	return identity.MustFromContext(ctx.Request.Context())
 }
 
+// Holding several currencies and settling up before the trip ends are no longer per-trip
+// choices - every trip allows both. The request fields stay in the contract so existing clients
+// keep validating, but whatever they send is ignored in favour of the fixed values.
 func createSettings(request triprequest.Create) domaintrip.Settings {
 	return domaintrip.Settings{
 		EditPermission:              domaintrip.EditPermission(request.EditPermission),
 		ApprovalRequiredExpenses:    request.ApprovalRequiredExpenses,
 		ApprovalRequiredSettlements: request.ApprovalRequiredSettlements,
-		MultiCurrencyEnabled:        request.MultiCurrencyEnabled,
-		AllowSettlementBeforeEnd:    request.AllowSettlementBeforeEnd,
+		MultiCurrencyEnabled:        true,
+		AllowSettlementBeforeEnd:    true,
 	}
 }
 
@@ -58,8 +61,8 @@ func updateSettings(request triprequest.Update) domaintrip.Settings {
 		EditPermission:              domaintrip.EditPermission(request.EditPermission),
 		ApprovalRequiredExpenses:    request.ApprovalRequiredExpenses,
 		ApprovalRequiredSettlements: request.ApprovalRequiredSettlements,
-		MultiCurrencyEnabled:        request.MultiCurrencyEnabled,
-		AllowSettlementBeforeEnd:    request.AllowSettlementBeforeEnd,
+		MultiCurrencyEnabled:        true,
+		AllowSettlementBeforeEnd:    true,
 	}
 }
 
