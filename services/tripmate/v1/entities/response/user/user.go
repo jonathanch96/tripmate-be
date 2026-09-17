@@ -14,6 +14,10 @@ type User struct {
 	AvatarURL   *string   `json:"avatar_url"`
 	HasAccount  bool      `json:"has_account"`
 	HasLoggedIn bool      `json:"has_logged_in"`
+	// Whether a password exists at all - never anything about what it is. This type is only
+	// served for the signed-in user's own profile (/users/me); other people's accounts go out
+	// through participantresponse, which has its own field list.
+	HasPassword bool      `json:"has_password"`
 	CreatedAt   time.Time `json:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at"`
 }
@@ -21,7 +25,8 @@ type User struct {
 func FromDomain(entity domainuser.User) User {
 	public := entity.Public()
 	return User{ID: public.ID, Email: public.Email, Name: public.Name, AvatarURL: public.AvatarURL,
-		HasAccount: public.HasAccount, HasLoggedIn: public.HasLoggedIn, CreatedAt: public.CreatedAt, UpdatedAt: public.UpdatedAt}
+		HasAccount: public.HasAccount, HasLoggedIn: public.HasLoggedIn, HasPassword: public.HasPassword,
+		CreatedAt: public.CreatedAt, UpdatedAt: public.UpdatedAt}
 }
 
 type Lookup struct {

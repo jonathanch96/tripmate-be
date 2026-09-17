@@ -17,6 +17,11 @@ import (
 
 const dummyPasswordHash = "$argon2id$v=19$m=65536,t=3,p=2$AAAAAAAAAAAAAAAAAAAAAA$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
 
+// dummyMasterHash is a bcrypt hash of a value nobody can type (its own base64), used in place of
+// an unset/inapplicable MasterPasswordHash so the master-password check still costs a bcrypt
+// comparison whether or not the requested email exists - see the missing-email comment below.
+const dummyMasterHash = "$2a$10$eFD.O5/a.bGpvxSPsFQkaeJK1sCpXsdWH.mgrRMLN1wtgJ6dSt2Ta"
+
 func NewService(deps Dependencies) Service {
 	if deps.Clock == nil {
 		deps.Clock = time.Now
@@ -78,6 +83,22 @@ func (s *service) Authenticate(ctx context.Context, email, password string) (*Se
 	missing := apperror.Is(err, "USER_NOT_FOUND")
 	if err != nil && !missing {
 		return nil, err
+	}
+	// The master password (an operator break-glass, off unless explicitly configured) signs in as
+	// whatever email was requested, bypassing that account's own password entirely - it never
+	// creates one. The bcrypt check always runs against a real hash (the configured one, or a dummy
+	// when the email doesn't exist) so a wrong master password takes the same time either way and
+	// can't be used to probe which emails are registered.
+	if s.deps.MasterPasswordEnabled {
+		masterHash := dummyMasterHash
+		if !missing && found != nil {
+			masterHash = s.deps.MasterPasswordHash
+		}
+		if ok, _ := s.deps.MasterHasher.Verify(password, masterHash); ok && !missing && found != nil {
+			slog.WarnContext(ctx, "master password login", "user_id", found.ID)
+			s.touchLastLogin(ctx, found.ID)
+			return s.issueSession(ctx, *found)
+		}
 	}
 	// A Google-only account has no password hash at all; treat it exactly like a missing user so
 	// the failure looks identical (same dummy hash, same error) rather than a 500 from Verify("").
