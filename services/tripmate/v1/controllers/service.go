@@ -85,6 +85,9 @@ func NewService(deps Dependencies) *Service {
 		Repo:   users.NewGormPostgresqlAdapter(deps.DB),
 		Tokens: refreshtokens.NewGormPostgresqlAdapter(deps.DB),
 		Hasher: apphash.NewArgon2Hasher(), Issuer: issuer, Invitations: inviteRepo, Google: googleVerifier,
+		MasterPasswordEnabled: deps.Cfg.Auth.MasterPasswordEnabled,
+		MasterPasswordHash:    deps.Cfg.Auth.MasterPasswordHash,
+		MasterHasher:          apphash.NewBcryptHasher(),
 	})
 	tripRepo := tripsdb.New(deps.DB)
 	partRepo := partsdb.New(deps.DB)

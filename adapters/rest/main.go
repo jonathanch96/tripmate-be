@@ -42,6 +42,9 @@ func main() {
 	}
 	log := appLogger.New(cfg.App.Env)
 	appLogger.SetDefault(log)
+	if cfg.Auth.MasterPasswordEnabled {
+		log.Warn("master password login is enabled - any existing email can be signed into with the shared master password")
+	}
 	db, err := config.NewDatabase(cfg, log)
 	if err != nil {
 		log.Error("startup failed", "err", err)

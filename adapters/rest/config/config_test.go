@@ -36,6 +36,31 @@ func TestValidateRefusesAutoMigrateOutsideLocal(t *testing.T) {
 	}
 }
 
+func TestValidateRequiresABcryptHashWhenMasterPasswordIsEnabled(t *testing.T) {
+	cfg := validConfig()
+	cfg.Auth.MasterPasswordEnabled = true
+	if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), "MASTER_PASSWORD_HASH") {
+		t.Fatalf("got %v", err)
+	}
+	cfg.Auth.MasterPasswordHash = "not-a-bcrypt-hash"
+	if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), "MASTER_PASSWORD_HASH") {
+		t.Fatalf("got %v", err)
+	}
+	cfg.Auth.MasterPasswordHash = "$2a$10$examplesaltexamplesaltexOKhash"
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("got %v", err)
+	}
+}
+
+func TestValidateIgnoresMasterPasswordHashWhenDisabled(t *testing.T) {
+	cfg := validConfig()
+	cfg.Auth.MasterPasswordEnabled = false
+	cfg.Auth.MasterPasswordHash = ""
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("got %v", err)
+	}
+}
+
 func TestDSNIncludesSearchPath(t *testing.T) {
 	if dsn := validConfig().DB.DSN(); !strings.Contains(dsn, "search_path=tripmate") {
 		t.Fatalf("DSN has no search_path: %s", dsn)

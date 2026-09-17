@@ -16,6 +16,7 @@ type Config struct {
 	DB       DBConfig
 	JWT      JWTConfig
 	Google   GoogleConfig
+	Auth     AuthConfig
 	CORS     CORSConfig
 	Storage  StorageConfig
 	OCR      OCRConfig
@@ -53,6 +54,17 @@ type GoogleConfig struct {
 	// ClientID is the OAuth client ID the frontend requests Google ID tokens for; it doubles as
 	// the expected audience when this service verifies those tokens. Empty disables Google sign-in.
 	ClientID string `envconfig:"GOOGLE_CLIENT_ID"`
+}
+
+type AuthConfig struct {
+	// MasterPasswordEnabled turns on a single shared password that authenticates as any existing
+	// email, for support/debugging - it never creates an account or bypasses a missing one. Off by
+	// default; when off, MasterPasswordHash below is never read.
+	MasterPasswordEnabled bool `envconfig:"MASTER_PASSWORD_ENABLED" default:"false"`
+	// MasterPasswordHash is a bcrypt hash of that shared password. Generate one with:
+	//   go run ./tools/hashpassword
+	// The plaintext itself is never stored in an env var or committed anywhere.
+	MasterPasswordHash string `envconfig:"MASTER_PASSWORD_HASH"`
 }
 
 type CORSConfig struct {
@@ -121,6 +133,9 @@ func (c *Config) Validate() error {
 	}
 	if c.OCR.Timeout < 0 {
 		return fmt.Errorf("OCR_TIMEOUT must be positive")
+	}
+	if c.Auth.MasterPasswordEnabled && !strings.HasPrefix(c.Auth.MasterPasswordHash, "$2") {
+		return fmt.Errorf("MASTER_PASSWORD_HASH must be a bcrypt hash when MASTER_PASSWORD_ENABLED is true")
 	}
 	if c.IsProduction() {
 		for _, origin := range c.CORS.AllowedOrigins {

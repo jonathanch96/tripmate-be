@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jblabs/tripmate-be/pkg/apperror"
+	apphash "github.com/jblabs/tripmate-be/pkg/hash"
 	appjwt "github.com/jblabs/tripmate-be/pkg/jwt"
 	domaininvitation "github.com/jblabs/tripmate-be/services/tripmate/v1/entities/domain/invitation"
 	domainuser "github.com/jblabs/tripmate-be/services/tripmate/v1/entities/domain/user"
@@ -310,6 +311,83 @@ func TestAuthenticateSuccess(t *testing.T) {
 	}
 	if repo.byEmail["known@example.com"].LastLoginAt == nil {
 		t.Fatal("a successful Authenticate should record LastLoginAt")
+	}
+}
+
+func TestAuthenticateMasterPasswordSignsInAsRequestedEmail(t *testing.T) {
+	service, repo, tokens, hasher := fixture()
+	repo.byEmail["known@example.com"] = &domainuser.User{ID: uuid.New(), Email: "known@example.com", PasswordHash: "hashed"}
+	master := &apphash.BcryptHasher{Cost: 4}
+	masterHash, err := master.Hash("let-me-in")
+	if err != nil {
+		t.Fatal(err)
+	}
+	service.deps.MasterPasswordEnabled = true
+	service.deps.MasterPasswordHash = masterHash
+	service.deps.MasterHasher = master
+
+	session, err := service.Authenticate(context.Background(), "known@example.com", "let-me-in")
+	if err != nil {
+		t.Fatalf("master password authenticate = %v", err)
+	}
+	if session.User.Email != "known@example.com" || len(tokens.stored) != 1 {
+		t.Fatalf("session = %+v", session)
+	}
+	if repo.byEmail["known@example.com"].LastLoginAt == nil {
+		t.Fatal("a master-password login should record LastLoginAt")
+	}
+	if hasher.verifyCalls != 0 {
+		t.Fatalf("master password should bypass the account's own hasher, verifyCalls = %d", hasher.verifyCalls)
+	}
+}
+
+func TestAuthenticateMasterPasswordCannotSignInAsAMissingEmail(t *testing.T) {
+	service, _, _, _ := fixture()
+	master := &apphash.BcryptHasher{Cost: 4}
+	masterHash, err := master.Hash("let-me-in")
+	if err != nil {
+		t.Fatal(err)
+	}
+	service.deps.MasterPasswordEnabled = true
+	service.deps.MasterPasswordHash = masterHash
+	service.deps.MasterHasher = master
+
+	if _, err := service.Authenticate(context.Background(), "nobody@example.com", "let-me-in"); !apperror.Is(err, "INVALID_CREDENTIALS") {
+		t.Fatalf("authenticate = %v", err)
+	}
+}
+
+func TestAuthenticateMasterPasswordDisabledIsInert(t *testing.T) {
+	service, repo, _, _ := fixture()
+	repo.byEmail["known@example.com"] = &domainuser.User{ID: uuid.New(), Email: "known@example.com", PasswordHash: "hashed"}
+	master := &apphash.BcryptHasher{Cost: 4}
+	masterHash, err := master.Hash("let-me-in")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// MasterPasswordEnabled left false (the zero value) even though a hash/hasher are configured.
+	service.deps.MasterPasswordHash = masterHash
+	service.deps.MasterHasher = master
+
+	if _, err := service.Authenticate(context.Background(), "known@example.com", "let-me-in"); !apperror.Is(err, "INVALID_CREDENTIALS") {
+		t.Fatalf("authenticate = %v", err)
+	}
+}
+
+func TestAuthenticateWrongMasterPasswordFallsBackToTheAccountPassword(t *testing.T) {
+	service, repo, _, _ := fixture()
+	repo.byEmail["known@example.com"] = &domainuser.User{ID: uuid.New(), Email: "known@example.com", PasswordHash: "hashed"}
+	master := &apphash.BcryptHasher{Cost: 4}
+	masterHash, err := master.Hash("let-me-in")
+	if err != nil {
+		t.Fatal(err)
+	}
+	service.deps.MasterPasswordEnabled = true
+	service.deps.MasterPasswordHash = masterHash
+	service.deps.MasterHasher = master
+
+	if _, err := service.Authenticate(context.Background(), "known@example.com", "Password1!"); err != nil {
+		t.Fatalf("real password should still work: %v", err)
 	}
 }
 
