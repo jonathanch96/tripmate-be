@@ -23,8 +23,9 @@ const (
 	StatusApproved Status = "approved"
 	StatusRejected Status = "rejected"
 
-	SourceManual  Source = "manual"
-	SourceReceipt Source = "receipt"
+	SourceManual    Source = "manual"
+	SourceReceipt   Source = "receipt"
+	SourceAssistant Source = "assistant"
 )
 
 type Payer struct {
@@ -55,11 +56,14 @@ type Expense struct {
 	// ChargedAmount and ChargedCurrency record what the payer's card or account actually showed,
 	// when that differs from Currency (the trip's base currency amount used for splitting). Both
 	// are nil unless the expense has one; ChargedAmount is only ever set alongside ChargedCurrency.
-	ChargedAmount        *decimal.Decimal
-	ChargedCurrency      *string
-	SplitType            SplitType
-	Status               Status
-	Source               Source
+	ChargedAmount   *decimal.Decimal
+	ChargedCurrency *string
+	SplitType       SplitType
+	Status          Status
+	Source          Source
+	// CreatedVia names the connected AI tool (e.g. "Claude") that created an assistant-sourced
+	// expense; nil for everything else.
+	CreatedVia           *string
 	Note                 *string
 	ApprovedByUserID     *uuid.UUID
 	ApprovedAt           *time.Time

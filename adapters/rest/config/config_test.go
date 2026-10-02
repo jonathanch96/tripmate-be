@@ -90,3 +90,27 @@ func TestLoadNamesMissingRequiredVariable(t *testing.T) {
 		t.Fatalf("error must name DB_PASSWORD, got %v", err)
 	}
 }
+
+func TestValidateRequiresAnOriginForThePublicAppURLWhenMCPIsEnabled(t *testing.T) {
+	cfg := validConfig()
+	cfg.MCP = MCPConfig{Enabled: true, PublicURL: "http://localhost:3000"}
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("local origin rejected: %v", err)
+	}
+	for _, bad := range []string{"", "tripmate.example.com", "https://tripmate.example.com/app", "ftp://tripmate.example.com"} {
+		cfg.MCP.PublicURL = bad
+		if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), "PUBLIC_APP_URL") {
+			t.Errorf("%q accepted: %v", bad, err)
+		}
+	}
+	cfg.App.Env = "production"
+	cfg.DB.SSLMode = "require"
+	cfg.MCP.PublicURL = "http://tripmate.example.com"
+	if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), "https") {
+		t.Fatalf("plain http accepted in production: %v", err)
+	}
+	cfg.MCP.Enabled = false
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("disabled MCP should not validate PUBLIC_APP_URL: %v", err)
+	}
+}

@@ -50,6 +50,13 @@ func TestCalculateSplitsRequiredTable(t *testing.T) {
 			{Amount: amount("200"), UserIDs: []uuid.UUID{participants[0]}},
 			{Amount: decimal.Zero, UserIDs: []uuid.UUID{participants[1]}},
 		}}, want: []string{"250", "0"}},
+		{name: "item spreads a bill-level discount in proportion to what was eaten", input: SplitInput{Currency: "PHP", SplitType: domainexpense.SplitItem, Extras: amount("-40"), Items: []ItemAssignment{
+			{Amount: amount("300"), UserIDs: []uuid.UUID{participants[0]}},
+			{Amount: amount("100"), UserIDs: []uuid.UUID{participants[1]}},
+		}}, want: []string{"270", "90"}},
+		{name: "item rejects a discount larger than the items", input: SplitInput{Currency: "PHP", SplitType: domainexpense.SplitItem, Extras: amount("-101"), Items: []ItemAssignment{
+			{Amount: amount("100"), UserIDs: []uuid.UUID{participants[0]}},
+		}}, errorCode: "VALIDATION_FAILED"},
 		{name: "item rejects an unassigned line", input: SplitInput{Currency: "PHP", SplitType: domainexpense.SplitItem, Items: []ItemAssignment{
 			{Amount: amount("100")},
 		}}, errorCode: "VALIDATION_FAILED"},

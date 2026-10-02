@@ -20,6 +20,7 @@ type Config struct {
 	CORS     CORSConfig
 	Storage  StorageConfig
 	OCR      OCRConfig
+	MCP      MCPConfig
 	Observab ObservabilityConfig
 }
 
@@ -88,6 +89,15 @@ type OCRConfig struct {
 	Timeout      time.Duration `envconfig:"OCR_TIMEOUT" default:"30s"`
 }
 
+type MCPConfig struct {
+	// PublicURL is the origin AI tools (Claude, ChatGPT, ...) reach TripMate on - the public
+	// frontend, which forwards /mcp, /oauth/* and /.well-known/oauth-* here. It is the OAuth issuer,
+	// and the consent page lives at PublicURL/oauth/consent. No trailing slash.
+	PublicURL string `envconfig:"PUBLIC_APP_URL" default:"http://localhost:3000"`
+	// Enabled turns the MCP endpoint and its OAuth server on.
+	Enabled bool `envconfig:"MCP_ENABLED" default:"true"`
+}
+
 type ObservabilityConfig struct{}
 
 func Load() (*Config, error) {
@@ -136,6 +146,15 @@ func (c *Config) Validate() error {
 	}
 	if c.Auth.MasterPasswordEnabled && !strings.HasPrefix(c.Auth.MasterPasswordHash, "$2") {
 		return fmt.Errorf("MASTER_PASSWORD_HASH must be a bcrypt hash when MASTER_PASSWORD_ENABLED is true")
+	}
+	if c.MCP.Enabled {
+		parsed, err := url.Parse(c.MCP.PublicURL)
+		if err != nil || (parsed.Scheme != "https" && parsed.Scheme != "http") || parsed.Host == "" || parsed.Path != "" && parsed.Path != "/" {
+			return fmt.Errorf("PUBLIC_APP_URL must be an origin such as https://tripmate.example.com")
+		}
+		if c.IsProduction() && parsed.Scheme != "https" {
+			return fmt.Errorf("PUBLIC_APP_URL must use https in production")
+		}
 	}
 	if c.IsProduction() {
 		for _, origin := range c.CORS.AllowedOrigins {

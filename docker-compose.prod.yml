@@ -19,6 +19,8 @@ x-backend-environment: &backend-environment
   CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-https://tripmate.jonathanchang.my.id}
   STORAGE_LOCAL_ROOT: /data/receipts
   STORAGE_PUBLIC_URL: ${STORAGE_PUBLIC_URL:-http://localhost:8080/api/v1/receipt-images}
+  PUBLIC_APP_URL: ${PUBLIC_APP_URL:-https://tripmate.jonathanchang.my.id}
+  MCP_ENABLED: ${MCP_ENABLED:-true}
 
 services:
   migrate:

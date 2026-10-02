@@ -258,6 +258,30 @@ func TestRegisterRejectsAnEmailThatWasAlreadyInvited(t *testing.T) {
 	}
 }
 
+// An empty password (the AI-assistant invite path) creates a password-less placeholder: nobody can
+// sign in to it with a password, and registering with that email claims it in place, keeping the
+// same user ID so the trips and expenses it was added to carry over.
+func TestCreateInvitedWithoutPasswordCreatesAPlaceholderThatRegistrationClaims(t *testing.T) {
+	service, repo, _, _ := fixture()
+	invited, err := service.CreateInvited(context.Background(), "newcomer@example.com", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if invited.PasswordHash != "" {
+		t.Fatalf("placeholder must have no password, got %+v", invited)
+	}
+	if _, err := service.Authenticate(context.Background(), "newcomer@example.com", ""); !apperror.Is(err, "INVALID_CREDENTIALS") {
+		t.Fatalf("authenticate against a placeholder = %v", err)
+	}
+	session, err := service.Register(context.Background(), RegisterInput{Email: "newcomer@example.com", Name: "New Comer", Password: "Password1!"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if session.User.ID != invited.ID || repo.byEmail["newcomer@example.com"].Name != "New Comer" {
+		t.Fatalf("registration did not claim the placeholder: %+v", session.User)
+	}
+}
+
 func TestCreateInvitedReturnsTheExistingRowOnARaceInsteadOfErroring(t *testing.T) {
 	service, repo, _, _ := fixture()
 	real := &domainuser.User{ID: uuid.New(), Email: "raced@example.com", Name: "Real", PasswordHash: "hashed"}

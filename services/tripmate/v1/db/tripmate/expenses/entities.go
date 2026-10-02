@@ -21,6 +21,7 @@ type Expense struct {
 	SplitType         string           `gorm:"column:split_type"`
 	Status            string           `gorm:"column:status"`
 	Source            string           `gorm:"column:source"`
+	CreatedVia        *string          `gorm:"column:created_via"`
 	Note              *string          `gorm:"column:note"`
 	CreatedByUserID   uuid.UUID        `gorm:"column:created_by_user_id"`
 	ApprovedByUserID  *uuid.UUID       `gorm:"column:approved_by_user_id"`

@@ -47,6 +47,18 @@ var catalog = map[string]definition{
 	"RATE_LIMITED":                    {http.StatusTooManyRequests, "Too many requests"},
 	"OCR_PROVIDER_ERROR":              {http.StatusBadGateway, "Receipt provider is unavailable"},
 	"OCR_UNPARSEABLE":                 {http.StatusBadGateway, "Receipt provider returned an invalid response"},
+	"OAUTH_INVALID_REQUEST":           {http.StatusBadRequest, "The OAuth request is invalid"},
+	"OAUTH_INVALID_CLIENT":            {http.StatusUnauthorized, "Client authentication failed"},
+	"OAUTH_INVALID_GRANT":             {http.StatusBadRequest, "The authorization grant is invalid"},
+	"OAUTH_INVALID_SCOPE":             {http.StatusBadRequest, "The requested scope is invalid"},
+	"OAUTH_INVALID_TARGET":            {http.StatusBadRequest, "The requested resource is invalid"},
+	"OAUTH_UNSUPPORTED_GRANT_TYPE":    {http.StatusBadRequest, "The grant type is not supported"},
+	"OAUTH_INVALID_REDIRECT_URI":      {http.StatusBadRequest, "The redirect URI is not allowed"},
+	"OAUTH_INVALID_CLIENT_METADATA":   {http.StatusBadRequest, "The client metadata is invalid"},
+	"OAUTH_INVALID_TOKEN":             {http.StatusUnauthorized, "The access token is invalid or expired"},
+	"OAUTH_REQUEST_NOT_FOUND":         {http.StatusNotFound, "This authorization request was not found or was already answered"},
+	"OAUTH_REQUEST_EXPIRED":           {http.StatusGone, "This authorization request has expired"},
+	"OAUTH_GRANT_NOT_FOUND":           {http.StatusNotFound, "Connected app not found"},
 	"INTERNAL_ERROR":                  {http.StatusInternalServerError, "An unexpected error occurred"},
 }
 
