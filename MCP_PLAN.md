@@ -16,14 +16,15 @@ AI tool (Claude / ChatGPT / …)
   │ 4. exchanges code → calls MCP tools with Bearer <mcp token>
   ▼
 tripmate-fe (only public service)
-  next.config.ts rewrites: /mcp, /oauth/authorize, /oauth/token, /oauth/register,
-                           /.well-known/oauth-protected-resource, /.well-known/oauth-authorization-server
+  pass-through route handlers: /mcp, /oauth/authorize, /oauth/token, /oauth/register,
+                               /.well-known/oauth-protected-resource[/mcp], /.well-known/oauth-authorization-server
   ▼
 tripmate-be (127.0.0.1 / shared_network only)
 ```
 
 - MCP transport: Streamable HTTP, **stateless, JSON responses** (no SSE) so it proxies cleanly
-  through Next rewrites.
+  through the frontend. Route handlers are used instead of `next.config` rewrites because rewrites
+  are resolved at build time and `BACKEND_BASE_URL` is only known at runtime.
 - SDK: official Go SDK `github.com/modelcontextprotocol/go-sdk`.
 - Tool handlers call existing domain services directly. Trip resolution reuses the `tripGuard`
   logic (extract it from `pkg/middleware/trip_authorization.go` into a shared helper), so every
@@ -144,7 +145,7 @@ Server `instructions` (also repeated in tool descriptions):
 
 ## Frontend (tripmate-fe)
 
-- `next.config.ts` rewrites to `BACKEND_BASE_URL` for the paths above.
+- Pass-through route handlers (`src/lib/server/passthrough.ts`) for the paths above.
 - `/oauth/consent` page: redirect to `/login?callbackUrl=…` if signed out; show app name, logo,
   redirect host, requested access (read / create & edit, with read-only option), signed-in email;
   Allow / Deny via server action.
