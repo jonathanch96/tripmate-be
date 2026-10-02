@@ -110,7 +110,7 @@ jobs:
 
       - name: Deploy to server
         run: |
-          ssh -o StrictHostKeyChecking=no root@${{ secrets.SERVER_IP }} bash << 'EOF'
+          ssh -p 2223 -o StrictHostKeyChecking=no root@${{ secrets.SERVER_IP }} bash << 'EOF'
             set -e
             cd ${{ secrets.APP_PATH }}
 
