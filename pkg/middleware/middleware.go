@@ -71,6 +71,11 @@ func Recovery(log *slog.Logger) gin.HandlerFunc {
 	}
 }
 
+// mcpAllowedHeaders covers the MCP transport headers browser-based clients send. Mcp-Param-* names
+// vary per tool, so the wildcard admits them; Authorization must be listed because "*" never
+// includes it.
+const mcpAllowedHeaders = "Authorization, Content-Type, Mcp-Session-Id, Mcp-Protocol-Version, Mcp-Method, Mcp-Name, Last-Event-ID, *"
+
 func CORS(options CORSOptions) gin.HandlerFunc {
 	allowed := make(map[string]struct{}, len(options.AllowedOrigins))
 	for _, origin := range options.AllowedOrigins {
@@ -80,7 +85,7 @@ func CORS(options CORSOptions) gin.HandlerFunc {
 		origin := c.GetHeader("Origin")
 		if origin != "" && isPublicPath(c.Request.URL.Path, options.PublicPathPrefixes) {
 			c.Header("Access-Control-Allow-Origin", "*")
-			c.Header("Access-Control-Allow-Headers", "Authorization, Content-Type, Mcp-Session-Id, Mcp-Protocol-Version, Last-Event-ID")
+			c.Header("Access-Control-Allow-Headers", mcpAllowedHeaders)
 			c.Header("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
 			c.Header("Access-Control-Expose-Headers", "WWW-Authenticate, Mcp-Session-Id")
 			if c.Request.Method == http.MethodOptions {
