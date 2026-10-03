@@ -78,7 +78,7 @@ func (s *service) Create(ctx context.Context, actor identity.Identity, tc tripct
 	entity := &domainexpense.Expense{ID: uuid.New(), TripID: tc.Trip.ID, CategoryID: input.CategoryID, ExpenseDate: date(input.ExpenseDate),
 		Description: strings.TrimSpace(input.Description), Amount: input.Amount, Currency: input.Currency,
 		ChargedAmount: chargedAmount, ChargedCurrency: chargedCurrency,
-		SplitType: input.SplitType, Status: status, Source: source(input.Source), Note: input.Note,
+		SplitType: input.SplitType, Status: status, Source: source(input.Source), CreatedVia: input.CreatedVia, Note: input.Note,
 		CreatedByUserID: actor.UserID, Version: 1, Payers: input.Payers, Splits: splits, CreatedAt: now, UpdatedAt: now}
 	err = s.deps.UOW.Do(ctx, func(txctx context.Context) error {
 		if _, createErr := s.deps.Expenses.Create(txctx, entity); createErr != nil {

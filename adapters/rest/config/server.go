@@ -27,7 +27,8 @@ func NewServer(cfg *Config, log *slog.Logger) *gin.Engine {
 		middleware.RequestID(),
 		middleware.Logging(log),
 		middleware.Recovery(log),
-		middleware.CORS(middleware.CORSOptions{AllowedOrigins: cfg.CORS.AllowedOrigins, Production: cfg.IsProduction()}),
+		middleware.CORS(middleware.CORSOptions{AllowedOrigins: cfg.CORS.AllowedOrigins, Production: cfg.IsProduction(),
+			PublicPathPrefixes: []string{"/mcp", "/oauth/register", "/oauth/token", "/.well-known"}}),
 	)
 	return engine
 }

@@ -27,7 +27,9 @@ type Service interface {
 	// email that was invited to a trip before anyone with that email had signed up. It lets the
 	// invited person be assigned as an expense payer/split participant right away, and sign in
 	// themselves immediately using the credentials shared alongside the invite link. If the email
-	// is claimed by someone else in the meantime, the existing row wins rather than erroring.
+	// is claimed by someone else in the meantime, the existing row wins rather than erroring. An
+	// empty password creates a password-less placeholder instead, claimed later by Register or
+	// Google sign-in with the same email.
 	CreateInvited(ctx context.Context, email, password string) (*domainuser.User, error)
 }
 

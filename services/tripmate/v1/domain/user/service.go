@@ -269,12 +269,19 @@ func (s *service) FindByEmail(ctx context.Context, email string) (*domainuser.Us
 // they've actually done so is tracked separately via LastLoginAt/HasLoggedIn.
 func (s *service) CreateInvited(ctx context.Context, email, password string) (*domainuser.User, error) {
 	email = normalizeEmail(email)
-	if fields := ValidatePassword(password); len(fields) > 0 {
-		return nil, apperror.WithFields("VALIDATION_FAILED", fields)
-	}
-	passwordHash, err := s.deps.Hasher.Hash(password)
-	if err != nil {
-		return nil, apperror.Wrap(err, "INTERNAL_ERROR")
+	// An empty password creates a placeholder (no password, no Google link) - the AI-assistant
+	// invite path, which never handles credentials. Register claims a placeholder in place and
+	// Google sign-in links it by email, so the person keeps every trip they were added to.
+	passwordHash := ""
+	if password != "" {
+		if fields := ValidatePassword(password); len(fields) > 0 {
+			return nil, apperror.WithFields("VALIDATION_FAILED", fields)
+		}
+		hashed, err := s.deps.Hasher.Hash(password)
+		if err != nil {
+			return nil, apperror.Wrap(err, "INTERNAL_ERROR")
+		}
+		passwordHash = hashed
 	}
 	created, err := s.deps.Repo.Create(ctx, &domainuser.User{ID: uuid.New(), Email: email, Name: email, PasswordHash: passwordHash})
 	if err != nil {

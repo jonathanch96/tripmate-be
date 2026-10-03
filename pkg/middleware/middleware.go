@@ -24,6 +24,10 @@ const IdentityKey = "identity"
 type CORSOptions struct {
 	AllowedOrigins []string
 	Production     bool
+	// PublicPathPrefixes are endpoints any origin may call without credentials: the MCP endpoint
+	// and the OAuth protocol endpoints, which browser-based MCP clients (e.g. MCP Inspector) reach
+	// cross-origin with a bearer token rather than cookies.
+	PublicPathPrefixes []string
 }
 
 func RequestID() gin.HandlerFunc {
@@ -74,6 +78,18 @@ func CORS(options CORSOptions) gin.HandlerFunc {
 	}
 	return func(c *gin.Context) {
 		origin := c.GetHeader("Origin")
+		if origin != "" && isPublicPath(c.Request.URL.Path, options.PublicPathPrefixes) {
+			c.Header("Access-Control-Allow-Origin", "*")
+			c.Header("Access-Control-Allow-Headers", "Authorization, Content-Type, Mcp-Session-Id, Mcp-Protocol-Version, Last-Event-ID")
+			c.Header("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
+			c.Header("Access-Control-Expose-Headers", "WWW-Authenticate, Mcp-Session-Id")
+			if c.Request.Method == http.MethodOptions {
+				c.AbortWithStatus(http.StatusNoContent)
+				return
+			}
+			c.Next()
+			return
+		}
 		_, exact := allowed[origin]
 		_, wildcard := allowed["*"]
 		if origin != "" && (exact || (wildcard && !options.Production)) {
@@ -93,6 +109,15 @@ func CORS(options CORSOptions) gin.HandlerFunc {
 		}
 		c.Next()
 	}
+}
+
+func isPublicPath(path string, prefixes []string) bool {
+	for _, prefix := range prefixes {
+		if path == prefix || strings.HasPrefix(path, strings.TrimRight(prefix, "/")+"/") {
+			return true
+		}
+	}
+	return false
 }
 
 func Authenticate(issuer *appjwt.Issuer) gin.HandlerFunc {

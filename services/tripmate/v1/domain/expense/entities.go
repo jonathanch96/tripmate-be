@@ -46,6 +46,8 @@ type CreateInput struct {
 	Extras decimal.Decimal
 	// Source records where the expense came from. Empty means a person typed it in.
 	Source domainexpense.Source
+	// CreatedVia names the connected AI tool behind an assistant-sourced expense.
+	CreatedVia *string
 }
 
 type UpdateInput struct {

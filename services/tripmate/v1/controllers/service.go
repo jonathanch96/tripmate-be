@@ -3,6 +3,7 @@ package controllers
 import (
 	"context"
 	"log/slog"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jblabs/tripmate-be/adapters/rest/config"
@@ -16,6 +17,8 @@ import (
 	expensecategorycontroller "github.com/jblabs/tripmate-be/services/tripmate/v1/controllers/expense_category"
 	financecontroller "github.com/jblabs/tripmate-be/services/tripmate/v1/controllers/finance"
 	invitationcontroller "github.com/jblabs/tripmate-be/services/tripmate/v1/controllers/invitation"
+	mcpcontroller "github.com/jblabs/tripmate-be/services/tripmate/v1/controllers/mcp"
+	oauthcontroller "github.com/jblabs/tripmate-be/services/tripmate/v1/controllers/oauth"
 	participantcontroller "github.com/jblabs/tripmate-be/services/tripmate/v1/controllers/participant"
 	receiptcontroller "github.com/jblabs/tripmate-be/services/tripmate/v1/controllers/receipt"
 	tripcontroller "github.com/jblabs/tripmate-be/services/tripmate/v1/controllers/trip"
@@ -26,6 +29,7 @@ import (
 	payersdb "github.com/jblabs/tripmate-be/services/tripmate/v1/db/tripmate/expense_payers"
 	splitsdb "github.com/jblabs/tripmate-be/services/tripmate/v1/db/tripmate/expense_splits"
 	expensesdb "github.com/jblabs/tripmate-be/services/tripmate/v1/db/tripmate/expenses"
+	oauthdb "github.com/jblabs/tripmate-be/services/tripmate/v1/db/tripmate/oauth"
 	outboxdb "github.com/jblabs/tripmate-be/services/tripmate/v1/db/tripmate/outbox_events"
 	receiptsdb "github.com/jblabs/tripmate-be/services/tripmate/v1/db/tripmate/receipts"
 	refreshtokens "github.com/jblabs/tripmate-be/services/tripmate/v1/db/tripmate/refresh_tokens"
@@ -40,6 +44,7 @@ import (
 	finaldomain "github.com/jblabs/tripmate-be/services/tripmate/v1/domain/finalization"
 	fxdomain "github.com/jblabs/tripmate-be/services/tripmate/v1/domain/fx"
 	invitationdomain "github.com/jblabs/tripmate-be/services/tripmate/v1/domain/invitation"
+	oauthdomain "github.com/jblabs/tripmate-be/services/tripmate/v1/domain/oauth"
 	participantdomain "github.com/jblabs/tripmate-be/services/tripmate/v1/domain/participant"
 	receiptdomain "github.com/jblabs/tripmate-be/services/tripmate/v1/domain/receipt"
 	settlementdomain "github.com/jblabs/tripmate-be/services/tripmate/v1/domain/settlement"
@@ -68,7 +73,10 @@ type Service struct {
 	categories expensecategorycontroller.Controller
 	finance    financecontroller.Controller
 	receipts   receiptcontroller.Controller
-	issuer     *appjwt.Issuer
+	// oauth and mcp are nil when MCP_ENABLED is false.
+	oauth  oauthcontroller.Controller
+	mcp    mcpcontroller.Controller
+	issuer *appjwt.Issuer
 }
 
 func NewService(deps Dependencies) *Service {
@@ -110,7 +118,21 @@ func NewService(deps Dependencies) *Service {
 	settlementService := settlementdomain.NewService(settlementdomain.Dependencies{Repo: settlementRepo, Participants: partRepo, Outbox: outboxdb.New(deps.DB), UOW: appdb.NewGormUnitOfWork(deps.DB)})
 	finalService := finaldomain.NewService(finaldomain.Dependencies{Balances: balanceService, FX: rateService, Trips: tripRepo, Outbox: outboxdb.New(deps.DB), UOW: appdb.NewGormUnitOfWork(deps.DB)})
 	inviteService := invitationdomain.NewService(inviteRepo, tripRepo, userService, partService)
-	return &Service{
+	var oauthCtl oauthcontroller.Controller
+	var mcpCtl mcpcontroller.Controller
+	if deps.Cfg.MCP.Enabled {
+		publicURL := strings.TrimRight(deps.Cfg.MCP.PublicURL, "/")
+		oauthService := oauthdomain.NewService(oauthdomain.Dependencies{
+			Repo: oauthdb.New(deps.DB), Users: userService, UOW: appdb.NewGormUnitOfWork(deps.DB),
+			Config: oauthdomain.Config{Issuer: publicURL, ConsentURL: publicURL + "/oauth/consent"},
+		})
+		oauthCtl = oauthcontroller.NewController(oauthService)
+		mcpCtl = mcpcontroller.NewController(mcpcontroller.Dependencies{
+			OAuth: oauthService, Trips: tripService, Participants: partService, Expenses: expenseService,
+			Categories: categoryService, Balances: balanceService, Settlements: settlementService, Invitations: inviteService,
+		})
+	}
+	return &Service{oauth: oauthCtl, mcp: mcpCtl,
 		auth: authcontroller.NewController(userService), users: usercontroller.NewController(userService),
 		trips:   tripcontroller.NewController(tripService, partService),
 		parts:   participantcontroller.NewController(tripService, partService),
@@ -135,6 +157,19 @@ func (s *Service) RegisterRoutes(group *gin.RouterGroup) {
 	s.categories.RegisterRoutes(protected)
 	s.finance.RegisterRoutes(protected)
 	s.receipts.RegisterRoutes(protected)
+	if s.oauth != nil {
+		s.oauth.RegisterRoutes(protected)
+	}
+}
+
+// RegisterProtocolRoutes mounts what AI tools call directly, outside /api/v1: the MCP endpoint and
+// the OAuth endpoints that authorize it.
+func (s *Service) RegisterProtocolRoutes(engine *gin.Engine) {
+	if s.oauth == nil || s.mcp == nil {
+		return
+	}
+	s.oauth.RegisterProtocolRoutes(engine)
+	s.mcp.RegisterProtocolRoutes(engine)
 }
 
 // googleVerifierAdapter adapts pkg/oauth/google's Verifier (which returns its own Claims type) to

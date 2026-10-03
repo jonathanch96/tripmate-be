@@ -38,6 +38,7 @@ type Expense struct {
 	SplitType       string     `json:"split_type"`
 	Status          string     `json:"status"`
 	Source          string     `json:"source"`
+	CreatedVia      *string    `json:"created_via"`
 	Note            *string    `json:"note"`
 	Payers          []Payer    `json:"payers"`
 	Splits          []Split    `json:"splits"`
@@ -58,7 +59,7 @@ func FromDomain(entity domainexpense.Expense, tc tripctx.TripContext, actorID uu
 	result := Expense{ID: entity.ID, TripID: entity.TripID, CategoryID: entity.CategoryID, ExpenseDate: entity.ExpenseDate.Format("2006-01-02"),
 		Description: entity.Description, Amount: entity.Amount.StringFixedBank(displayScale(entity.Currency)), Currency: entity.Currency,
 		ChargedCurrency: entity.ChargedCurrency,
-		SplitType:       string(entity.SplitType), Status: string(entity.Status), Source: string(entity.Source), Note: entity.Note,
+		SplitType:       string(entity.SplitType), Status: string(entity.Status), Source: string(entity.Source), CreatedVia: entity.CreatedVia, Note: entity.Note,
 		ApprovedAt: entity.ApprovedAt, RejectedReason: entity.RejectedReason, Version: entity.Version,
 		CreatedAt: entity.CreatedAt, UpdatedAt: entity.UpdatedAt}
 	if entity.ChargedAmount != nil {

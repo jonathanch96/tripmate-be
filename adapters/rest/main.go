@@ -108,6 +108,8 @@ func registerRoutes(engine *gin.Engine, cfg *config.Config, db *gorm.DB, log *sl
 			c.DataFromReader(http.StatusOK, -1, contentType, file, nil)
 		})
 	}
-	tripmate.NewService(tripmate.Dependencies{DB: db, Cfg: cfg, Log: log, Storage: objectStore, OCR: provider}).RegisterRoutes(v1)
+	service := tripmate.NewService(tripmate.Dependencies{DB: db, Cfg: cfg, Log: log, Storage: objectStore, OCR: provider})
+	service.RegisterRoutes(v1)
+	service.RegisterProtocolRoutes(engine)
 	return nil
 }

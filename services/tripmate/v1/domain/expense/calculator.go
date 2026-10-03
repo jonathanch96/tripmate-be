@@ -28,8 +28,9 @@ type SplitInput struct {
 	// share counts for a shares split. Only read for SplitPercent/SplitShares.
 	Weights map[uuid.UUID]decimal.Decimal
 	Items   []ItemAssignment
-	// Extras is tax plus service charge, allocated across diners in proportion to what they ate.
-	// Only meaningful for an item split.
+	// Extras is tax plus service charge minus any bill-level discount, allocated across diners in
+	// proportion to what they ate. Negative when the discount outweighs tax and service. Only
+	// meaningful for an item split.
 	Extras decimal.Decimal
 }
 
@@ -183,9 +184,11 @@ func splitByItem(input SplitInput) ([]domainexpense.Split, error) {
 	for index, userID := range diners {
 		weights[index] = subtotals[userID]
 	}
+	// Extras is net of any bill-level discount, so it may be negative - but a discount can never
+	// exceed what was ordered, or someone would end up being owed money for eating.
 	extras := input.Extras
-	if extras.IsNegative() {
-		return nil, apperror.New("VALIDATION_FAILED")
+	if itemsTotal.Add(extras).IsNegative() {
+		return nil, apperror.WithFields("VALIDATION_FAILED", []apperror.FieldError{{Field: "extras", Rule: "max", Message: "discount cannot exceed the items total"}})
 	}
 	allocated := money.SplitProportional(extras, weights, input.Currency)
 
