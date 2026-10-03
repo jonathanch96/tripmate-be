@@ -116,7 +116,7 @@ type addExpenseInput struct {
 	Description  string       `json:"description" jsonschema:"what it was for, e.g. Taxi to airport"`
 	Date         string       `json:"date" jsonschema:"YYYY-MM-DD"`
 	Amount       Money        `json:"amount" jsonschema:"total amount"`
-	Currency     string       `json:"currency" jsonschema:"ISO 4217 code, usually the trip's base currency"`
+	Currency     string       `json:"currency,omitempty" jsonschema:"ISO 4217 code of the currency the amounts are in, as the user gave them or as printed on the bill (e.g. JPY). Do not convert to the base currency yourself; leave empty only for the trip's base currency"`
 	SplitType    string       `json:"split_type" jsonschema:"equal | manual | percent | shares"`
 	PaidBy       []payerInput `json:"paid_by" jsonschema:"who paid; amounts must add up to the total"`
 	Participants []string     `json:"participants,omitempty" jsonschema:"equal split only: user_ids sharing the cost equally"`
@@ -135,7 +135,7 @@ type billExpenseInput struct {
 	TripCode      string          `json:"trip_code" jsonschema:"the trip's code"`
 	Description   string          `json:"description" jsonschema:"usually the merchant name, e.g. Warung Made"`
 	Date          string          `json:"date" jsonschema:"YYYY-MM-DD from the bill"`
-	Currency      string          `json:"currency" jsonschema:"ISO 4217 code of the bill"`
+	Currency      string          `json:"currency,omitempty" jsonschema:"ISO 4217 code of the currency the amounts are in, as the user gave them or as printed on the bill (e.g. JPY). Do not convert to the base currency yourself; leave empty only for the trip's base currency"`
 	Items         []billItemInput `json:"items" jsonschema:"every line on the bill with who shared it"`
 	Tax           Money           `json:"tax,omitempty" jsonschema:"bill-level tax amount, if any"`
 	ServiceCharge Money           `json:"service_charge,omitempty" jsonschema:"bill-level service charge amount, if any"`
@@ -151,10 +151,16 @@ type settlementInput struct {
 	FromUserID string `json:"from_user_id" jsonschema:"user_id of the person who paid the money back"`
 	ToUserID   string `json:"to_user_id" jsonschema:"user_id of the person who received it"`
 	Amount     Money  `json:"amount" jsonschema:"amount repaid"`
-	Currency   string `json:"currency,omitempty" jsonschema:"ISO 4217 code; defaults to the trip's base currency"`
+	Currency   string `json:"currency,omitempty" jsonschema:"ISO 4217 code of the currency the amounts are in, as the user gave them or as printed on the bill (e.g. JPY). Do not convert to the base currency yourself; leave empty only for the trip's base currency"`
 	Method     string `json:"method,omitempty" jsonschema:"cash | bank_transfer (default cash)"`
 	Date       string `json:"date,omitempty" jsonschema:"YYYY-MM-DD; defaults to today"`
 	Note       string `json:"note,omitempty"`
+}
+
+type setRateInput struct {
+	TripCode   string `json:"trip_code" jsonschema:"the trip's code"`
+	Currency   string `json:"currency" jsonschema:"ISO 4217 code of the foreign currency, e.g. JPY"`
+	RateToBase Money  `json:"rate_to_base" jsonschema:"how much 1 unit of currency is worth in the trip's base currency, as the user confirmed it (1 JPY = 105 IDR -> 105)"`
 }
 
 type inviteInput struct {
@@ -175,17 +181,24 @@ type categoryOut struct {
 	Name string `json:"name"`
 }
 
+type rateOut struct {
+	Currency   string `json:"currency"`
+	RateToBase string `json:"rate_to_base" jsonschema:"how much 1 unit of currency is worth in the base currency"`
+}
+
 type tripOut struct {
-	Code         string           `json:"code"`
-	Name         string           `json:"name"`
-	BaseCurrency string           `json:"base_currency"`
-	Country      string           `json:"country,omitempty"`
-	StartDate    string           `json:"start_date"`
-	EndDate      string           `json:"end_date"`
-	Status       string           `json:"status"`
-	YourRole     string           `json:"your_role,omitempty"`
-	Participants []participantOut `json:"participants,omitempty"`
-	Categories   []categoryOut    `json:"categories,omitempty"`
+	Code          string           `json:"code"`
+	Name          string           `json:"name"`
+	BaseCurrency  string           `json:"base_currency"`
+	MultiCurrency bool             `json:"multi_currency" jsonschema:"whether expenses may be recorded in currencies other than the base currency"`
+	ExchangeRates []rateOut        `json:"exchange_rates,omitempty" jsonschema:"currencies this trip already has a rate for; any other currency needs set_exchange_rate first"`
+	Country       string           `json:"country,omitempty"`
+	StartDate     string           `json:"start_date"`
+	EndDate       string           `json:"end_date"`
+	Status        string           `json:"status"`
+	YourRole      string           `json:"your_role,omitempty"`
+	Participants  []participantOut `json:"participants,omitempty"`
+	Categories    []categoryOut    `json:"categories,omitempty"`
 }
 
 type tripsOut struct {
@@ -225,9 +238,10 @@ type expensesOut struct {
 }
 
 type savedExpenseOut struct {
-	Expense   expenseOut `json:"expense"`
-	Duplicate bool       `json:"duplicate,omitempty" jsonschema:"true when an identical expense had just been saved, so nothing new was created"`
-	Message   string     `json:"message"`
+	Expense   expenseOut     `json:"expense"`
+	InBase    *conversionOut `json:"in_base_currency,omitempty"`
+	Duplicate bool           `json:"duplicate,omitempty" jsonschema:"true when an identical expense had just been saved, so nothing new was created"`
+	Message   string         `json:"message"`
 }
 
 type billShareOut struct {
@@ -238,12 +252,20 @@ type billShareOut struct {
 	Total         string `json:"total"`
 }
 
+// conversionOut shows what an amount in a foreign currency counts for in the trip's balances.
+type conversionOut struct {
+	BaseCurrency string `json:"base_currency"`
+	Rate         string `json:"rate" jsonschema:"e.g. 1 JPY = 105 IDR"`
+	Amount       string `json:"amount" jsonschema:"the total converted to the base currency"`
+}
+
 type billOut struct {
 	Preview    bool           `json:"preview"`
 	Currency   string         `json:"currency"`
 	ItemsTotal string         `json:"items_total"`
 	Extras     string         `json:"tax_service_discount"`
 	Total      string         `json:"total"`
+	InBase     *conversionOut `json:"in_base_currency,omitempty"`
 	Shares     []billShareOut `json:"shares"`
 	Expense    *expenseOut    `json:"expense,omitempty"`
 	Duplicate  bool           `json:"duplicate,omitempty"`
@@ -290,8 +312,17 @@ type settlementsOut struct {
 }
 
 type savedSettlementOut struct {
-	Settlement settlementOut `json:"settlement"`
-	Message    string        `json:"message"`
+	Settlement settlementOut  `json:"settlement"`
+	InBase     *conversionOut `json:"in_base_currency,omitempty"`
+	Message    string         `json:"message"`
+}
+
+type savedRateOut struct {
+	Currency     string `json:"currency"`
+	BaseCurrency string `json:"base_currency"`
+	RateToBase   string `json:"rate_to_base"`
+	Rate         string `json:"rate" jsonschema:"e.g. 1 JPY = 105 IDR"`
+	Message      string `json:"message"`
 }
 
 type inviteOut struct {

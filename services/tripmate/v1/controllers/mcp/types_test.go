@@ -84,7 +84,7 @@ func TestToolsRegisterWithSchemasAndAnnotations(t *testing.T) {
 	}
 	for name, want := range map[string]bool{"list_trips": true, "get_active_trip": true, "get_trip": true, "list_expenses": true,
 		"get_balances": true, "list_settlements": true, "create_bill_expense": false, "add_expense": false,
-		"record_settlement": false, "create_trip": false, "invite_participant": false} {
+		"record_settlement": false, "set_exchange_rate": false, "create_trip": false, "invite_participant": false} {
 		got, ok := readOnly[name]
 		if !ok || got != want {
 			t.Errorf("tool %s registered=%v readOnly=%v, want readOnly=%v", name, ok, got, want)

@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"net/url"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -276,6 +277,27 @@ func TestReadOnlyApprovalNarrowsTheGrant(t *testing.T) {
 	}
 	if domainoauth.HasScope(info.Scopes, domainoauth.ScopeWrite) || !domainoauth.HasScope(info.Scopes, domainoauth.ScopeRead) {
 		t.Fatalf("scopes = %v", info.Scopes)
+	}
+}
+
+// An app that asked only to view can still be allowed to edit when the user ticks "Create and
+// edit" on the consent page.
+func TestUserMayGrantWriteToAReadOnlyRequest(t *testing.T) {
+	f := newFixture(t)
+	client := f.register(t, "none")
+	requestID := f.authorize(t, client.Client.ClientID, domainoauth.ScopeRead)
+	redirect, err := f.svc.Approve(context.Background(), f.userID, requestID, []string{domainoauth.ScopeWrite})
+	if err != nil {
+		t.Fatal(err)
+	}
+	parsed, _ := url.Parse(redirect)
+	pair, err := f.svc.Token(context.Background(), TokenInput{GrantType: "authorization_code", Code: parsed.Query().Get("code"),
+		RedirectURI: "https://claude.ai/api/mcp/auth_callback", CodeVerifier: verifier, ClientID: client.Client.ClientID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(pair.Scopes, domainoauth.SupportedScopes) {
+		t.Fatalf("scopes = %v", pair.Scopes)
 	}
 }
 
