@@ -130,6 +130,7 @@ func NewService(deps Dependencies) *Service {
 		mcpCtl = mcpcontroller.NewController(mcpcontroller.Dependencies{
 			OAuth: oauthService, Trips: tripService, Participants: partService, Expenses: expenseService,
 			Categories: categoryService, Balances: balanceService, Settlements: settlementService, Invitations: inviteService,
+			FX: rateService,
 		})
 	}
 	return &Service{oauth: oauthCtl, mcp: mcpCtl,

@@ -11,6 +11,7 @@ import (
 	"github.com/jblabs/tripmate-be/pkg/money"
 	"github.com/jblabs/tripmate-be/pkg/tripctx"
 	expensedomain "github.com/jblabs/tripmate-be/services/tripmate/v1/domain/expense"
+	fxdomain "github.com/jblabs/tripmate-be/services/tripmate/v1/domain/fx"
 	settlementdomain "github.com/jblabs/tripmate-be/services/tripmate/v1/domain/settlement"
 	tripdomain "github.com/jblabs/tripmate-be/services/tripmate/v1/domain/trip"
 	domainexpense "github.com/jblabs/tripmate-be/services/tripmate/v1/entities/domain/expense"
@@ -45,7 +46,7 @@ func (c *controller) registerTools(server *mcp.Server) {
 		Description: "Find the trip a bill or expense belongs to: trips that are open (not archived or finalized) and whose dates include the given date, with their participants. " +
 			"Start here when splitting a bill. If match is \"multiple\", ask the user which trip - never guess. If match is \"none\", show the listed recent trips and ask."}, c.getActiveTrip)
 	mcp.AddTool(server, &mcp.Tool{Name: "get_trip", Annotations: readOnly("Get trip details"), InputSchema: inputSchema[tripInput](),
-		Description: "Get one trip's details: dates, base currency, status, participants (with user_id) and expense categories."}, c.getTrip)
+		Description: "Get one trip's details: dates, base currency, whether other currencies are allowed and the exchange rates it has, status, participants (with user_id) and expense categories."}, c.getTrip)
 	mcp.AddTool(server, &mcp.Tool{Name: "list_expenses", Annotations: readOnly("List expenses"), InputSchema: inputSchema[listExpensesInput](),
 		Description: "List a trip's expenses, newest first, with who paid and who owes what. 25 per page."}, c.listExpenses)
 	mcp.AddTool(server, &mcp.Tool{Name: "get_balances", Annotations: readOnly("Get balances"), InputSchema: inputSchema[tripInput](),
@@ -62,6 +63,9 @@ func (c *controller) registerTools(server *mcp.Server) {
 			"For a restaurant bill or receipt with line items, use create_bill_expense instead."}, c.addExpense)
 	mcp.AddTool(server, &mcp.Tool{Name: "record_settlement", Annotations: writes("Record a repayment"), InputSchema: inputSchema[settlementInput](),
 		Description: "Record that one participant paid another back. Use get_balances to see who owes whom."}, c.recordSettlement)
+	mcp.AddTool(server, &mcp.Tool{Name: "set_exchange_rate", Annotations: writes("Set an exchange rate"), InputSchema: inputSchema[setRateInput](),
+		Description: "Save how much one unit of a foreign currency is worth in the trip's base currency (trip planners only). Use it when an expense or repayment fails because the trip has no rate for its currency: " +
+			"ask the user for the rate first and pass the number they confirm. It replaces any earlier rate for that currency and applies to every amount in that currency on the trip."}, c.setExchangeRate)
 	mcp.AddTool(server, &mcp.Tool{Name: "create_trip", Annotations: writes("Create a trip"), InputSchema: inputSchema[createTripInput](),
 		Description: "Create a new trip with the user as its planner. Confirm the name, dates and base currency with the user first."}, c.createTrip)
 	mcp.AddTool(server, &mcp.Tool{Name: "invite_participant", Annotations: writes("Add a participant"), InputSchema: inputSchema[inviteInput](),
@@ -262,10 +266,11 @@ func (c *controller) createBillExpense(ctx context.Context, req *mcp.CallToolReq
 	if err != nil {
 		return nil, billOut{}, toolError(err)
 	}
-	currency := strings.ToUpper(strings.TrimSpace(in.Currency))
-	if currency == "" {
-		currency = tc.Trip.BaseCurrency
+	conv, err := c.currencyFor(ctx, k, tc, in.Currency)
+	if err != nil {
+		return nil, billOut{}, err
 	}
+	currency := conv.Currency
 	day, err := parseDate("date", in.Date)
 	if err != nil {
 		return nil, billOut{}, err
@@ -346,7 +351,7 @@ func (c *controller) createBillExpense(ctx context.Context, req *mcp.CallToolReq
 		return nil, billOut{}, toolError(err)
 	}
 	out := billOut{Preview: in.Preview, Currency: currency, ItemsTotal: itemsTotal.StringFixedBank(scale),
-		Extras: extras.StringFixedBank(scale), Total: total.StringFixedBank(scale), Shares: billShares(subtotals, splits, names, scale)}
+		Extras: extras.StringFixedBank(scale), Total: total.StringFixedBank(scale), InBase: conv.out(total), Shares: billShares(subtotals, splits, names, scale)}
 	if in.Preview {
 		out.Message = "Preview only - nothing saved. Show the user each person's total and save with preview=false once they confirm."
 		return nil, out, nil
@@ -397,10 +402,11 @@ func (c *controller) addExpense(ctx context.Context, req *mcp.CallToolRequest, i
 	if err != nil {
 		return nil, savedExpenseOut{}, err
 	}
-	currency := strings.ToUpper(strings.TrimSpace(in.Currency))
-	if currency == "" {
-		currency = tc.Trip.BaseCurrency
+	conv, err := c.currencyFor(ctx, k, tc, in.Currency)
+	if err != nil {
+		return nil, savedExpenseOut{}, err
 	}
+	currency := conv.Currency
 	amount, err := in.Amount.DecimalIn("amount", currency)
 	if err != nil {
 		return nil, savedExpenseOut{}, err
@@ -451,14 +457,14 @@ func (c *controller) addExpense(ctx context.Context, req *mcp.CallToolRequest, i
 		return nil, savedExpenseOut{}, errors.New("split_type must be equal, manual, percent or shares (use create_bill_expense for itemised bills)")
 	}
 	if duplicate := c.recentDuplicate(ctx, k, tc, day, input.Description, amount, currency); duplicate != nil {
-		return nil, savedExpenseOut{Expense: expenseSummary(*duplicate, names), Duplicate: true,
+		return nil, savedExpenseOut{Expense: expenseSummary(*duplicate, names), InBase: conv.out(amount), Duplicate: true,
 			Message: "This expense was already saved a moment ago; nothing new was created."}, nil
 	}
 	created, err := c.deps.Expenses.Create(ctx, k.who, *tc, input)
 	if err != nil {
 		return nil, savedExpenseOut{}, toolError(err)
 	}
-	return nil, savedExpenseOut{Expense: expenseSummary(*created, names), Message: savedMessage(created)}, nil
+	return nil, savedExpenseOut{Expense: expenseSummary(*created, names), InBase: conv.out(amount), Message: savedMessage(created)}, nil
 }
 
 func (c *controller) recordSettlement(ctx context.Context, req *mcp.CallToolRequest, in settlementInput) (*mcp.CallToolResult, savedSettlementOut, error) {
@@ -481,10 +487,11 @@ func (c *controller) recordSettlement(ctx context.Context, req *mcp.CallToolRequ
 	if err != nil {
 		return nil, savedSettlementOut{}, err
 	}
-	currency := strings.ToUpper(strings.TrimSpace(in.Currency))
-	if currency == "" {
-		currency = tc.Trip.BaseCurrency
+	conv, err := c.currencyFor(ctx, k, tc, in.Currency)
+	if err != nil {
+		return nil, savedSettlementOut{}, err
 	}
+	currency := conv.Currency
 	amount, err := in.Amount.DecimalIn("amount", currency)
 	if err != nil {
 		return nil, savedSettlementOut{}, err
@@ -514,7 +521,7 @@ func (c *controller) recordSettlement(ctx context.Context, req *mcp.CallToolRequ
 	if created.Status == domainsettlement.StatusPending {
 		message = "Repayment recorded; it waits for the trip planner's approval before it counts."
 	}
-	return nil, savedSettlementOut{Settlement: settlementSummary(*created, names), Message: message}, nil
+	return nil, savedSettlementOut{Settlement: settlementSummary(*created, names), InBase: conv.out(amount), Message: message}, nil
 }
 
 func (c *controller) createTrip(ctx context.Context, req *mcp.CallToolRequest, in createTripInput) (*mcp.CallToolResult, tripOut, error) {
@@ -593,6 +600,13 @@ func (c *controller) tripDetail(ctx context.Context, k *caller, code string) (*t
 	}
 	out := tripSummary(tc.Trip)
 	out.YourRole = string(tc.Participant.Role)
+	if out.MultiCurrency {
+		rates, err := c.deps.FX.ListForTrip(ctx, *tc)
+		if err != nil {
+			return nil, err
+		}
+		out.ExchangeRates = exchangeRates(fxdomain.NewRateTable(rates), rateCurrencies(rates, tc.Trip.BaseCurrency), tc.Trip.BaseCurrency)
+	}
 	out.Participants = make([]participantOut, 0, len(parts))
 	for _, part := range parts {
 		out.Participants = append(out.Participants, participantOut{UserID: part.UserID.String(), Name: part.EffectiveName(), Role: string(part.Role)})
@@ -746,7 +760,7 @@ func savedMessage(created *domainexpense.Expense) string {
 }
 
 func tripSummary(trip domaintrip.Trip) tripOut {
-	out := tripOut{Code: trip.Code, Name: trip.Name, BaseCurrency: trip.BaseCurrency,
+	out := tripOut{Code: trip.Code, Name: trip.Name, BaseCurrency: trip.BaseCurrency, MultiCurrency: trip.Settings.MultiCurrencyEnabled,
 		StartDate: trip.StartDate.Format(dateLayout), EndDate: trip.EndDate.Format(dateLayout), Status: "open"}
 	if trip.Country != nil {
 		out.Country = *trip.Country

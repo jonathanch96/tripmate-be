@@ -179,7 +179,10 @@ func (s *service) GetRequest(ctx context.Context, _ uuid.UUID, requestID uuid.UU
 }
 
 // Approve records the signed-in user's consent and returns the client redirect carrying the
-// authorization code. scopes may narrow the request (e.g. read-only); empty grants what was asked.
+// authorization code. scopes is what the user chose on the consent page and may differ from the
+// request either way (RFC 6749 §3.3): read-only for an app that asked to edit, or "Create and edit"
+// for an app that only asked to view. The token response reports the scopes actually granted.
+// Empty grants what was asked.
 func (s *service) Approve(ctx context.Context, userID, requestID uuid.UUID, scopes []string) (string, error) {
 	request, err := s.pendingRequest(ctx, requestID)
 	if err != nil {
@@ -187,19 +190,11 @@ func (s *service) Approve(ctx context.Context, userID, requestID uuid.UUID, scop
 	}
 	granted := request.Scopes
 	if len(scopes) > 0 {
-		narrowed, ok := parseScopes(strings.Join(scopes, " "))
+		chosen, ok := parseScopes(strings.Join(scopes, " "))
 		if !ok {
 			return "", apperror.New("OAUTH_INVALID_SCOPE")
 		}
-		granted = make([]string, 0, len(narrowed))
-		for _, scope := range narrowed {
-			if slices.Contains(request.Scopes, scope) {
-				granted = append(granted, scope)
-			}
-		}
-		if len(granted) == 0 {
-			return "", apperror.New("OAUTH_INVALID_SCOPE")
-		}
+		granted = chosen
 	}
 	code, err := randomToken("tmac_", 32)
 	if err != nil {

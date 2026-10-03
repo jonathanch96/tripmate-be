@@ -53,6 +53,9 @@ Tokens
 
 Scopes
 - `tripmate.read`, `tripmate.write` (write implies read). Consent screen offers "read-only".
+- `/mcp` accepts any valid token (all carry `tripmate.read`), but its 401 challenge names both
+  scopes: MCP clients request exactly the challenge's scope, so naming only `tripmate.read` would
+  hide the "Create and edit" choice on the consent page.
 - Scopes only narrow what the user can already do; roles still enforced by the domain.
 
 Migration `000020_oauth_mcp`
@@ -68,7 +71,8 @@ Migration `000020_oauth_mcp`
 Read (`tripmate.read`)
 - `list_trips` — the user's trips (status filter)
 - `get_active_trip(date)` — see bill flow
-- `get_trip(trip_code)` — settings, participants, categories, base currency in one call
+- `get_trip(trip_code)` — settings, participants, categories, base currency, whether other
+  currencies are allowed and the exchange rates the trip has
 - `list_expenses(trip_code, filters, page)`
 - `get_balances(trip_code)` — who owes whom (optimized)
 - `list_settlements(trip_code)`
@@ -79,13 +83,23 @@ Write (`tripmate.write`)
   description within ~2 min returns the existing expense)
 - `create_bill_expense` — see bill flow
 - `record_settlement`
+- `set_exchange_rate(trip_code, currency, rate_to_base)` — planner only; see currencies
 - `invite_participant(trip_code, email)` — planner only; see invitations
 
 Not in v1 (do these in the web app): delete expense/settlement, finalize/unfinalize,
 approve/reject, remove participant, archive.
 
+Currencies: amounts are recorded in the currency the user gave or the bill shows, never converted by
+the AI. Before saving (and before a bill preview), a currency other than the base is checked: the
+trip must allow multiple currencies and have a rate to the base. Without a rate the tool saves
+nothing and tells the AI to ask the user for it and call `set_exchange_rate` (planner) or, for
+anyone else, to explain that the planner has to add it. Saved results include the total converted
+to the base currency.
+
 All tools declare `readOnlyHint` / `destructiveHint`, an `outputSchema`, and return structured
-content. Errors come back as plain, actionable text so the AI can fix and retry.
+content. Errors come back as plain, actionable text so the AI can fix and retry: domain errors carry a
+next step per error code, and the server instructions tell the AI that a failed call saved nothing
+and that it must explain the problem to the user instead of stopping.
 
 ## Bill flow
 
