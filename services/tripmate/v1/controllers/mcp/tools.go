@@ -15,6 +15,7 @@ import (
 	settlementdomain "github.com/jblabs/tripmate-be/services/tripmate/v1/domain/settlement"
 	tripdomain "github.com/jblabs/tripmate-be/services/tripmate/v1/domain/trip"
 	domainexpense "github.com/jblabs/tripmate-be/services/tripmate/v1/entities/domain/expense"
+	domainoauth "github.com/jblabs/tripmate-be/services/tripmate/v1/entities/domain/oauth"
 	domainsettlement "github.com/jblabs/tripmate-be/services/tripmate/v1/entities/domain/settlement"
 	domaintrip "github.com/jblabs/tripmate-be/services/tripmate/v1/entities/domain/trip"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -30,8 +31,8 @@ const (
 )
 
 func readOnly(title string) *mcp.ToolAnnotations {
-	closed := false
-	return &mcp.ToolAnnotations{Title: title, ReadOnlyHint: true, OpenWorldHint: &closed}
+	closed, destructive := false, false
+	return &mcp.ToolAnnotations{Title: title, ReadOnlyHint: true, DestructiveHint: &destructive, OpenWorldHint: &closed}
 }
 
 func writes(title string) *mcp.ToolAnnotations {
@@ -39,36 +40,44 @@ func writes(title string) *mcp.ToolAnnotations {
 	return &mcp.ToolAnnotations{Title: title, DestructiveHint: &destructive, OpenWorldHint: &closed}
 }
 
+// oauthMeta declares each tool's authentication requirements for hosts such as ChatGPT. The Go
+// SDK does not yet expose the top-level securitySchemes extension, so use its documented _meta
+// compatibility mirror. Authentication and scope enforcement still happen at the HTTP/token
+// boundary; this metadata lets the host discover the correct linking flow and permission labels.
+func oauthMeta(scopes ...string) mcp.Meta {
+	return mcp.Meta{"securitySchemes": []map[string]any{{"type": "oauth2", "scopes": scopes}}}
+}
+
 func (c *controller) registerTools(server *mcp.Server) {
-	mcp.AddTool(server, &mcp.Tool{Name: "list_trips", Annotations: readOnly("List trips"), InputSchema: inputSchema[listTripsInput](),
+	mcp.AddTool(server, &mcp.Tool{Name: "list_trips", Meta: oauthMeta(domainoauth.ScopeRead), Annotations: readOnly("List trips"), InputSchema: inputSchema[listTripsInput](),
 		Description: "List the user's TripMate trips (newest first) with their codes, dates and status."}, c.listTrips)
-	mcp.AddTool(server, &mcp.Tool{Name: "get_active_trip", Annotations: readOnly("Find the active trip"), InputSchema: inputSchema[activeTripInput](),
+	mcp.AddTool(server, &mcp.Tool{Name: "get_active_trip", Meta: oauthMeta(domainoauth.ScopeRead), Annotations: readOnly("Find the active trip"), InputSchema: inputSchema[activeTripInput](),
 		Description: "Find the trip a bill or expense belongs to: trips that are open (not archived or finalized) and whose dates include the given date, with their participants. " +
 			"Start here when splitting a bill. If match is \"multiple\", ask the user which trip - never guess. If match is \"none\", show the listed recent trips and ask."}, c.getActiveTrip)
-	mcp.AddTool(server, &mcp.Tool{Name: "get_trip", Annotations: readOnly("Get trip details"), InputSchema: inputSchema[tripInput](),
+	mcp.AddTool(server, &mcp.Tool{Name: "get_trip", Meta: oauthMeta(domainoauth.ScopeRead), Annotations: readOnly("Get trip details"), InputSchema: inputSchema[tripInput](),
 		Description: "Get one trip's details: dates, base currency, whether other currencies are allowed and the exchange rates it has, status, participants (with user_id) and expense categories."}, c.getTrip)
-	mcp.AddTool(server, &mcp.Tool{Name: "list_expenses", Annotations: readOnly("List expenses"), InputSchema: inputSchema[listExpensesInput](),
+	mcp.AddTool(server, &mcp.Tool{Name: "list_expenses", Meta: oauthMeta(domainoauth.ScopeRead), Annotations: readOnly("List expenses"), InputSchema: inputSchema[listExpensesInput](),
 		Description: "List a trip's expenses, newest first, with who paid and who owes what. 25 per page."}, c.listExpenses)
-	mcp.AddTool(server, &mcp.Tool{Name: "get_balances", Annotations: readOnly("Get balances"), InputSchema: inputSchema[tripInput](),
+	mcp.AddTool(server, &mcp.Tool{Name: "get_balances", Meta: oauthMeta(domainoauth.ScopeRead), Annotations: readOnly("Get balances"), InputSchema: inputSchema[tripInput](),
 		Description: "Get each participant's balance on a trip (in the base currency) and the suggested payments that would settle everyone up."}, c.getBalances)
-	mcp.AddTool(server, &mcp.Tool{Name: "list_settlements", Annotations: readOnly("List settlements"), InputSchema: inputSchema[tripInput](),
+	mcp.AddTool(server, &mcp.Tool{Name: "list_settlements", Meta: oauthMeta(domainoauth.ScopeRead), Annotations: readOnly("List settlements"), InputSchema: inputSchema[tripInput](),
 		Description: "List repayments recorded between participants on a trip."}, c.listSettlements)
 
-	mcp.AddTool(server, &mcp.Tool{Name: "create_bill_expense", Annotations: writes("Split a bill"), InputSchema: inputSchema[billExpenseInput](),
+	mcp.AddTool(server, &mcp.Tool{Name: "create_bill_expense", Meta: oauthMeta(domainoauth.ScopeRead, domainoauth.ScopeWrite), Annotations: writes("Split a bill"), InputSchema: inputSchema[billExpenseInput](),
 		Description: "Save an itemised bill as one expense, split by who had what. You read the bill; pass every item with its line amount and the user_ids who shared it, " +
 			"plus bill-level tax, service charge and discount separately - TripMate spreads those in proportion to what each person had. " +
 			"Call with preview=true first and show the user each person's total; save with preview=false after they confirm. Amounts are plain numbers as printed."}, c.createBillExpense)
-	mcp.AddTool(server, &mcp.Tool{Name: "add_expense", Annotations: writes("Add an expense"), InputSchema: inputSchema[addExpenseInput](),
+	mcp.AddTool(server, &mcp.Tool{Name: "add_expense", Meta: oauthMeta(domainoauth.ScopeRead, domainoauth.ScopeWrite), Annotations: writes("Add an expense"), InputSchema: inputSchema[addExpenseInput](),
 		Description: "Add a non-itemised expense to a trip (taxi, hotel, tickets...). split_type equal needs participants; manual, percent and shares need splits. " +
 			"For a restaurant bill or receipt with line items, use create_bill_expense instead."}, c.addExpense)
-	mcp.AddTool(server, &mcp.Tool{Name: "record_settlement", Annotations: writes("Record a repayment"), InputSchema: inputSchema[settlementInput](),
+	mcp.AddTool(server, &mcp.Tool{Name: "record_settlement", Meta: oauthMeta(domainoauth.ScopeRead, domainoauth.ScopeWrite), Annotations: writes("Record a repayment"), InputSchema: inputSchema[settlementInput](),
 		Description: "Record that one participant paid another back. Use get_balances to see who owes whom."}, c.recordSettlement)
-	mcp.AddTool(server, &mcp.Tool{Name: "set_exchange_rate", Annotations: writes("Set an exchange rate"), InputSchema: inputSchema[setRateInput](),
+	mcp.AddTool(server, &mcp.Tool{Name: "set_exchange_rate", Meta: oauthMeta(domainoauth.ScopeRead, domainoauth.ScopeWrite), Annotations: writes("Set an exchange rate"), InputSchema: inputSchema[setRateInput](),
 		Description: "Save how much one unit of a foreign currency is worth in the trip's base currency (trip planners only). Use it when an expense or repayment fails because the trip has no rate for its currency: " +
 			"ask the user for the rate first and pass the number they confirm. It replaces any earlier rate for that currency and applies to every amount in that currency on the trip."}, c.setExchangeRate)
-	mcp.AddTool(server, &mcp.Tool{Name: "create_trip", Annotations: writes("Create a trip"), InputSchema: inputSchema[createTripInput](),
+	mcp.AddTool(server, &mcp.Tool{Name: "create_trip", Meta: oauthMeta(domainoauth.ScopeRead, domainoauth.ScopeWrite), Annotations: writes("Create a trip"), InputSchema: inputSchema[createTripInput](),
 		Description: "Create a new trip with the user as its planner. Confirm the name, dates and base currency with the user first."}, c.createTrip)
-	mcp.AddTool(server, &mcp.Tool{Name: "invite_participant", Annotations: writes("Add a participant"), InputSchema: inputSchema[inviteInput](),
+	mcp.AddTool(server, &mcp.Tool{Name: "invite_participant", Meta: oauthMeta(domainoauth.ScopeRead, domainoauth.ScopeWrite), Annotations: writes("Add a participant"), InputSchema: inputSchema[inviteInput](),
 		Description: "Add someone to a trip by email (trip planners only). If they have no TripMate account yet, they are added right away and the trip appears when they sign up with that email."}, c.invite)
 }
 

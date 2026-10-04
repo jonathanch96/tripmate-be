@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -64,6 +65,74 @@ func TestUnauthenticatedChallengeOffersEveryScope(t *testing.T) {
 	engine.ServeHTTP(recorder, request)
 	if recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), "TripMate tracks shared trip expenses") {
 		t.Fatalf("authenticated initialize: %d %s", recorder.Code, recorder.Body.String())
+	}
+}
+
+func TestChatGPTModernDiscoveryAdvertisesToolOAuth(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	engine := gin.New()
+	(&controller{deps: Dependencies{OAuth: fakeOAuth{}}}).RegisterProtocolRoutes(engine)
+
+	call := func(body, method string) *httptest.ResponseRecorder {
+		t.Helper()
+		request := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(body))
+		request.Header.Set("Authorization", "Bearer good")
+		request.Header.Set("Content-Type", "application/json")
+		request.Header.Set("Accept", "application/json, text/event-stream")
+		request.Header.Set("MCP-Protocol-Version", "2026-07-28")
+		request.Header.Set("Mcp-Method", method)
+		recorder := httptest.NewRecorder()
+		engine.ServeHTTP(recorder, request)
+		return recorder
+	}
+
+	meta := `"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientInfo":{"name":"ChatGPT","version":"1"},"io.modelcontextprotocol/clientCapabilities":{}}`
+	discover := call(`{"jsonrpc":"2.0","id":1,"method":"server/discover","params":{`+meta+`}}`, "server/discover")
+	if discover.Code != http.StatusOK || !strings.Contains(discover.Body.String(), `"2026-07-28"`) {
+		t.Fatalf("server/discover: %d %s", discover.Code, discover.Body.String())
+	}
+
+	listed := call(`{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{`+meta+`}}`, "tools/list")
+	if listed.Code != http.StatusOK {
+		t.Fatalf("tools/list: %d %s", listed.Code, listed.Body.String())
+	}
+	var response struct {
+		Result struct {
+			Tools []struct {
+				Name string         `json:"name"`
+				Meta map[string]any `json:"_meta"`
+			} `json:"tools"`
+		} `json:"result"`
+	}
+	if err := json.Unmarshal(listed.Body.Bytes(), &response); err != nil {
+		t.Fatal(err)
+	}
+	if len(response.Result.Tools) == 0 {
+		t.Fatal("tools/list returned no tools")
+	}
+	writeTools := map[string]bool{
+		"create_bill_expense": true, "add_expense": true, "record_settlement": true,
+		"set_exchange_rate": true, "create_trip": true, "invite_participant": true,
+	}
+	for _, tool := range response.Result.Tools {
+		schemes, ok := tool.Meta["securitySchemes"].([]any)
+		if !ok || len(schemes) != 1 {
+			t.Errorf("tool %q has no OAuth securitySchemes metadata", tool.Name)
+			continue
+		}
+		scheme, ok := schemes[0].(map[string]any)
+		if !ok || scheme["type"] != "oauth2" {
+			t.Errorf("tool %q securitySchemes = %#v", tool.Name, schemes)
+			continue
+		}
+		scopes, ok := scheme["scopes"].([]any)
+		if !ok || (len(scopes) != 1 && len(scopes) != 2) || scopes[0] != domainoauth.ScopeRead {
+			t.Errorf("tool %q OAuth scopes = %#v", tool.Name, scheme["scopes"])
+			continue
+		}
+		if writeTools[tool.Name] != (len(scopes) == 2 && scopes[1] == domainoauth.ScopeWrite) {
+			t.Errorf("tool %q write scopes = %#v", tool.Name, scheme["scopes"])
+		}
 	}
 }
 
